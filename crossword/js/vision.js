@@ -261,3 +261,128 @@ export function classifyCells(warp, rows, cols) {
   const t = (lo + hi) / 2;
   return means.map(m => (m < t ? 1 : 0));
 }
+
+// ---- Clue text layout ----
+// Finds blocks of text (columns, sections) in reading order, ignoring the grid,
+// so that multi-column clue lists are read column by column.
+
+function pointInPolygon(x, y, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function expandPolygon(pts, f) {
+  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  return pts.map(([x, y]) => [cx + (x - cx) * (1 + f), cy + (y - cy) * (1 + f)]);
+}
+
+// Connected components with their boxes; also returns the label image.
+function components(mask, w, h) {
+  const labels = new Int32Array(mask.length);
+  const stack = new Int32Array(mask.length);
+  const comps = [];
+  for (let start = 0; start < mask.length; start++) {
+    if (!mask[start] || labels[start]) continue;
+    const id = comps.length + 1;
+    let sp = 0;
+    stack[sp++] = start; labels[start] = id;
+    let x0 = w, y0 = h, x1 = 0, y1 = 0, count = 0;
+    while (sp) {
+      const i = stack[--sp];
+      const x = i % w, y = (i - x) / w;
+      count++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (x > 0 && mask[i - 1] && !labels[i - 1]) { labels[i - 1] = id; stack[sp++] = i - 1; }
+      if (x < w - 1 && mask[i + 1] && !labels[i + 1]) { labels[i + 1] = id; stack[sp++] = i + 1; }
+      if (y > 0 && mask[i - w] && !labels[i - w]) { labels[i - w] = id; stack[sp++] = i - w; }
+      if (y < h - 1 && mask[i + w] && !labels[i + w]) { labels[i + w] = id; stack[sp++] = i + w; }
+    }
+    comps.push({ x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, count });
+  }
+  return { labels, comps };
+}
+
+export function findTextBlocks(gray, exclude = null) {
+  const { w, h } = gray;
+  const win = Math.max(15, Math.round(Math.min(w, h) / 25)) | 1;
+  const raw = adaptiveDarkMask(gray, win, 0.2);
+  if (exclude) {
+    const poly = expandPolygon(exclude, 0.03);
+    const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]);
+    for (let y = Math.max(0, Math.floor(Math.min(...ys))); y < Math.min(h, Math.ceil(Math.max(...ys))); y++)
+      for (let x = Math.max(0, Math.floor(Math.min(...xs))); x < Math.min(w, Math.ceil(Math.max(...xs))); x++)
+        if (pointInPolygon(x + 0.5, y + 0.5, poly)) raw[y * w + x] = 0;
+  }
+  const { labels, comps } = components(raw, w, h);
+  // Typical character height = median height of letter-sized blobs.
+  const hs = comps.filter(c => c.h >= 4 && c.h < h / 8 && c.w < c.h * 4 && c.count > 6).map(c => c.h).sort((a, b) => a - b);
+  const xh = hs.length ? hs[hs.length >> 1] : 12;
+  // Keep only text-like blobs: drop noise, long rules, borders and big dark areas.
+  const keep = new Uint8Array(comps.length + 1);
+  comps.forEach((c, k) => {
+    keep[k + 1] = c.count >= 3 && c.h <= xh * 5 && c.w <= xh * 25 ? 1 : 0;
+  });
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < mask.length; i++) if (labels[i] && keep[labels[i]]) mask[i] = 1;
+
+  const blocks = [];
+  xyCut(mask, w, 0, 0, w, h, xh, blocks, 0);
+  return { blocks, textHeight: xh };
+}
+
+function runs(counts, limit) {
+  const out = [];
+  let start = -1;
+  for (let i = 0; i <= counts.length; i++) {
+    const blank = i < counts.length && counts[i] <= limit;
+    if (blank && start < 0) start = i;
+    if (!blank && start >= 0) { out.push({ start, len: i - start }); start = -1; }
+  }
+  return out;
+}
+
+function xyCut(mask, W, x0, y0, x1, y1, xh, out, depth) {
+  // Trim to content.
+  const rowC = new Int32Array(y1 - y0), colC = new Int32Array(x1 - x0);
+  let total = 0;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    if (mask[y * W + x]) { rowC[y - y0]++; colC[x - x0]++; total++; }
+  }
+  if (total < xh * xh * 0.5) return;
+  let t = 0; while (!rowC[t]) t++;
+  let b = rowC.length - 1; while (!rowC[b]) b--;
+  let l = 0; while (!colC[l]) l++;
+  let r = colC.length - 1; while (!colC[r]) r--;
+  const rx0 = x0 + l, ry0 = y0 + t, rx1 = x0 + r + 1, ry1 = y0 + b + 1;
+  const RW = rx1 - rx0, RH = ry1 - ry0;
+  const rows = rowC.slice(t, b + 1), cols = colC.slice(l, r + 1);
+  const split = (dir, at) => {
+    if (dir === 'h') {
+      xyCut(mask, W, rx0, ry0, rx1, ry0 + at, xh, out, depth + 1);
+      xyCut(mask, W, rx0, ry0 + at, rx1, ry1, xh, out, depth + 1);
+    } else {
+      xyCut(mask, W, rx0, ry0, rx0 + at, ry1, xh, out, depth + 1);
+      xyCut(mask, W, rx0 + at, ry0, rx1, ry1, xh, out, depth + 1);
+    }
+  };
+  if (depth < 40) {
+    const widest = list => list.reduce((a, g) => (!a || g.len > a.len ? g : a), null);
+    // 1. A wide horizontal gap separates sections (e.g. Across above Down).
+    const hg = widest(runs(rows, 0));
+    if (hg && hg.len >= 1.5 * xh) return split('h', hg.start + (hg.len >> 1));
+    // 2. A column gutter. Allow a few crossings (a heading spanning both columns).
+    for (const limit of [0, RH * 0.08]) {
+      const vg = widest(runs(cols, limit).filter(g =>
+        g.len >= xh && g.start >= RW * 0.15 && RW - (g.start + g.len) >= RW * 0.15));
+      if (vg) return split('v', vg.start + (vg.len >> 1));
+    }
+    // 3. A smaller horizontal gap (title, paragraph break).
+    if (hg && hg.len >= xh) return split('h', hg.start + (hg.len >> 1));
+  }
+  out.push({ x0: rx0, y0: ry0, x1: rx1, y1: ry1 });
+}
