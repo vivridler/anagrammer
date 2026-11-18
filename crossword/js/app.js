@@ -1,7 +1,7 @@
 import * as V from './vision.js';
 import * as P from './puzzle.js';
 import * as DB from './store.js';
-import { recognizeText } from './ocr.js';
+import { analyzeGrid, findCorners, readClueText, cluesFromOcr, scaledCanvas } from './importer.js';
 
 const app = document.getElementById('app');
 
@@ -20,7 +20,7 @@ function h(tag, attrs = {}, ...kids) {
   return el;
 }
 
-const go = hash => { location.hash = hash; };
+const go = hash => { if (location.hash === hash) route(); else location.hash = hash; };
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 let teardown = [];
@@ -30,7 +30,8 @@ function listen(target, type, fn, opts) {
   onCleanup(() => target.removeEventListener(type, fn, opts));
 }
 
-function toast(msg, ms = 2500) {
+function toast(msg, ms = 3000) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
   const t = h('div', { class: 'toast' }, msg);
   document.body.append(t);
   setTimeout(() => t.remove(), ms);
@@ -43,9 +44,9 @@ function header(title, { back, actions = [] } = {}) {
     h('div', { class: 'actions' }, actions));
 }
 
-function sheet(title, body, { onClose } = {}) {
+function sheet(title, body, { onClose, tall } = {}) {
   const close = () => { wrap.remove(); onClose && onClose(); };
-  const wrap = h('div', { class: 'sheet-wrap', onclick: e => { if (e.target === wrap) close(); } },
+  const wrap = h('div', { class: 'sheet-wrap' + (tall ? ' tall' : ''), onclick: e => { if (e.target === wrap) close(); } },
     h('div', { class: 'sheet' },
       h('div', { class: 'sheet-head' }, h('h2', {}, title), h('button', { class: 'icon', 'aria-label': 'Close', onclick: close }, '✕')),
       h('div', { class: 'sheet-body' }, body)));
@@ -62,17 +63,13 @@ async function loadImage(blob) {
   return { img, url };
 }
 
-function scaledCanvas(img, maxDim) {
-  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-  const s = Math.min(1, maxDim / Math.max(iw, ih));
-  const c = document.createElement('canvas');
-  c.width = Math.round(iw * s); c.height = Math.round(ih * s);
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  return { canvas: c, scale: s };
-}
+const canvasToBlob = (c, q = 0.88) => new Promise(r => c.toBlob(r, 'image/jpeg', q));
 
-function grayOf(canvas) {
-  return V.grayFromImageData(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height));
+async function normalizeImport(file) {
+  const { img, url } = await loadImage(file);
+  const { canvas } = scaledCanvas(img, 2400);
+  URL.revokeObjectURL(url);
+  return canvasToBlob(canvas);
 }
 
 function grayToCanvas(g) {
@@ -87,15 +84,6 @@ function grayToCanvas(g) {
   return c;
 }
 
-const canvasToBlob = (c, q = 0.88) => new Promise(r => c.toBlob(r, 'image/jpeg', q));
-
-async function normalizeImport(file) {
-  const { img, url } = await loadImage(file);
-  const { canvas } = scaledCanvas(img, 2400);
-  URL.revokeObjectURL(url);
-  return canvasToBlob(canvas);
-}
-
 function fitCanvas(canvas, cssW, cssH) {
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = cssW + 'px';
@@ -107,20 +95,6 @@ function fitCanvas(canvas, cssW, cssH) {
   return ctx;
 }
 
-let saveTimer = null, pendingSave = null;
-function flushSave() {
-  clearTimeout(saveTimer);
-  if (pendingSave) { DB.savePuzzle(pendingSave); pendingSave = null; }
-}
-function saveSoon(p) {
-  clearTimeout(saveTimer);
-  pendingSave = p;
-  saveTimer = setTimeout(flushSave, 300);
-}
-// Don't lose the last keystrokes if the app is closed or switched away from.
-document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
-window.addEventListener('pagehide', flushSave);
-
 function filePicker({ capture } = {}) {
   return new Promise(resolve => {
     const input = h('input', { type: 'file', accept: 'image/*', capture: capture ? 'environment' : null, style: 'display:none' });
@@ -130,19 +104,169 @@ function filePicker({ capture } = {}) {
   });
 }
 
+const otherDir = d => (d === 'across' ? 'down' : 'across');
+const dirLabel = d => (d === 'across' ? 'Across' : 'Down');
+
+// ---------- puzzle storage (one shared object per puzzle, so views and background jobs agree) ----------
+
+const cache = new Map();
+async function loadPuzzle(id) {
+  if (!cache.has(id)) {
+    const p = await DB.getPuzzle(id);
+    if (!p) return null;
+    cache.set(id, p);
+  }
+  return cache.get(id);
+}
+
+let saveTimer = null;
+const pendingSaves = new Set();
+function flushSave() {
+  clearTimeout(saveTimer);
+  const list = [...pendingSaves];
+  pendingSaves.clear();
+  return Promise.all(list.map(p => DB.savePuzzle(p)));
+}
+function saveSoon(p) {
+  pendingSaves.add(p);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, 300);
+}
+// Don't lose the last keystrokes if the app is closed or switched away from.
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+window.addEventListener('pagehide', flushSave);
+
+function resetFill(p) { p.fill = new Array(p.rows * p.cols).fill(''); }
+const numbering = p => P.numberGrid(p.rows, p.cols, p.blocks);
+
+// ---------- background clue reading ----------
+
+const jobs = new Map();         // puzzle id -> { label, progress }
+const bus = new EventTarget();  // 'clues' events: detail = { id, done, report, error }
+
+function startClueJob(p, { replace = false } = {}) {
+  if (!p.image || jobs.has(p.id)) return;
+  const job = { label: 'Reading clues', progress: null };
+  jobs.set(p.id, job);
+  p.cluesStatus = 'pending';
+  saveSoon(p);
+  const emit = extra => bus.dispatchEvent(new CustomEvent('clues', { detail: { id: p.id, ...extra } }));
+  emit({});
+  (async () => {
+    const { img, url } = await loadImage(p.image);
+    try {
+      const text = await readClueText(img, { exclude: p.corners }, m => { Object.assign(job, m); emit({}); });
+      let extraText = '';
+      if (p.clueImage) {
+        const second = await loadImage(p.clueImage);
+        try { extraText = await readClueText(second.img, {}, m => { Object.assign(job, m); emit({}); }); }
+        finally { URL.revokeObjectURL(second.url); }
+      }
+      const num = numbering(p);
+      const rec = cluesFromOcr(text + '\n' + extraText, num);
+      // Keep anything the user typed while we were reading.
+      for (const d of ['across', 'down']) {
+        if (replace || !p.cluesText[d].trim()) p.cluesText[d] = P.cluesToText(rec[d]);
+      }
+      p.clues = P.cluesFromText(p.cluesText);
+      p.cluesStatus = 'done';
+      emit({ done: true, report: P.clueReport(num, p.clues) });
+    } catch (err) {
+      console.error(err);
+      p.cluesStatus = 'failed';
+      emit({ done: true, error: err.message || String(err) });
+    } finally {
+      URL.revokeObjectURL(url);
+      jobs.delete(p.id);
+      saveSoon(p);
+    }
+  })();
+}
+
+function jobLabel(id) {
+  const j = jobs.get(id);
+  if (!j) return '';
+  return j.label + (j.progress != null ? ` ${Math.round(j.progress * 100)}%` : '') + '…';
+}
+
+// ---------- photo viewer (pinch / buttons to zoom, drag to pan) ----------
+
+// Which side of the photo the clues are on (the side without the grid).
+function clueSide(p) {
+  if (!p.corners || !p.imageWidth) return 'start';
+  const cx = p.corners.reduce((a, c) => a + c[0], 0) / 4;
+  return cx > p.imageWidth / 2 ? 'start' : 'end';
+}
+
+function photoPane(blobs, { className = '', side = 'start' } = {}) {
+  const holder = h('div', { class: 'photo-pane ' + className });
+  const inner = h('div', { class: 'photo-inner' });
+  holder.append(inner);
+  let zoom = 1;
+  const imgs = [];
+  Promise.all(blobs.filter(Boolean).map(loadImage)).then(list => {
+    for (const { img, url } of list) { onCleanup(() => URL.revokeObjectURL(url)); imgs.push(img); inner.append(img); }
+    // Wide pages: start filling the pane's height (readable text), scrolled to the clues.
+    requestAnimationFrame(() => {
+      const first = imgs[0];
+      if (!first || !holder.clientWidth) return;
+      const fitH = holder.clientHeight / (holder.clientWidth * first.naturalHeight / first.naturalWidth);
+      zoom = 1;
+      applyZoom(Math.max(1, Math.min(4, fitH)), 0, 0);
+      holder.scrollLeft = side === 'end' ? holder.scrollWidth : 0;
+      holder.scrollTop = 0;
+    });
+  });
+  function applyZoom(z, cx, cy) {
+    const old = zoom;
+    zoom = Math.min(6, Math.max(1, z));
+    // Keep the point under (cx, cy) in place.
+    const px = cx ?? holder.clientWidth / 2, py = cy ?? holder.clientHeight / 2;
+    const ax = (holder.scrollLeft + px) / old, ay = (holder.scrollTop + py) / old;
+    inner.style.width = zoom * 100 + '%';
+    holder.scrollLeft = ax * zoom - px;
+    holder.scrollTop = ay * zoom - py;
+  }
+  let pinch = null;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  holder.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) pinch = { d: dist(e.touches), z: zoom };
+  }, { passive: true });
+  holder.addEventListener('touchmove', e => {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const r = holder.getBoundingClientRect();
+    const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+    const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+    applyZoom(pinch.z * dist(e.touches) / pinch.d, cx, cy);
+  }, { passive: false });
+  holder.addEventListener('touchend', e => { if (e.touches.length < 2) pinch = null; });
+  holder.addEventListener('wheel', e => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const r = holder.getBoundingClientRect();
+    applyZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  const controls = h('div', { class: 'zoom-ctl' },
+    h('button', { 'aria-label': 'Zoom out', onclick: () => applyZoom(zoom / 1.5) }, '−'),
+    h('button', { 'aria-label': 'Zoom in', onclick: () => applyZoom(zoom * 1.5) }, '+'));
+  return h('div', { class: 'photo-wrap ' + className }, holder, controls);
+}
+
 // ---------- router ----------
 
 async function route() {
-  flushSave();
+  await flushSave();
   teardown.forEach(fn => fn());
   teardown = [];
   document.querySelectorAll('.sheet-wrap').forEach(el => el.remove());
+  document.body.classList.remove('list-open');
   const parts = location.hash.replace(/^#\/?/, '').split('/');
   try {
     if (parts[0] === 'p' && parts[1]) {
-      const p = await DB.getPuzzle(parts[1]);
+      const p = await loadPuzzle(parts[1]);
       if (!p) return go('#/');
-      const view = { corners: cornersView, grid: gridView, clues: cluesView, solve: solveView }[parts[2]] || solveView;
+      const view = { corners: cornersView, grid: gridView, clues: cluesView }[parts[2]] || solveView;
       await view(p);
     } else {
       await homeView();
@@ -181,16 +305,40 @@ function progressOf(p) {
   return open ? Math.round(100 * filled / open) : 0;
 }
 
+function busy(msg) {
+  const el = h('div', { class: 'busy' }, h('div', { class: 'spinner' }), h('p', {}, msg));
+  document.body.append(el);
+  return () => el.remove();
+}
+
 async function createFromImage(file) {
   if (!file) return;
-  const blob = await normalizeImport(file);
-  const p = {
-    id: newId(), title: 'Crossword ' + new Date().toLocaleDateString(), created: Date.now(),
-    image: blob, clueImage: null, corners: null, rows: 15, cols: 15, blocks: null,
-    cluesText: { across: '', down: '' }, clues: { across: {}, down: {} }, fill: null, stage: 'corners',
-  };
-  await DB.savePuzzle(p);
-  go(`#/p/${p.id}/corners`);
+  const done = busy('Finding the crossword…');
+  try {
+    const blob = await normalizeImport(file);
+    const { img, url } = await loadImage(blob);
+    // Let the spinner paint before the heavy work.
+    await new Promise(r => setTimeout(r, 30));
+    const corners = findCorners(img);
+    const grid = analyzeGrid(img, corners);
+    const p = {
+      id: newId(), title: 'Crossword ' + new Date().toLocaleDateString(), created: Date.now(),
+      image: blob, imageWidth: img.naturalWidth, clueImage: null, corners, rows: grid.rows, cols: grid.cols, blocks: grid.blocks,
+      detectedFor: JSON.stringify(corners),
+      cluesText: { across: '', down: '' }, clues: { across: {}, down: {} }, fill: null, stage: 'solve',
+    };
+    URL.revokeObjectURL(url);
+    resetFill(p);
+    cache.set(p.id, p);
+    await DB.savePuzzle(p);
+    startClueJob(p);
+    go(`#/p/${p.id}/solve`);
+  } catch (err) {
+    console.error(err);
+    toast('Could not open that image: ' + (err.message || err), 4000);
+  } finally {
+    done();
+  }
 }
 
 async function createBlank() {
@@ -202,24 +350,26 @@ async function createBlank() {
   const p = {
     id: newId(), title: 'Crossword ' + new Date().toLocaleDateString(), created: Date.now(),
     image: null, clueImage: null, corners: null, rows, cols, blocks: new Array(rows * cols).fill(0),
-    cluesText: { across: '', down: '' }, clues: { across: {}, down: {} }, fill: null, stage: 'grid',
+    cluesText: { across: '', down: '' }, clues: { across: {}, down: {} }, fill: null, stage: 'solve',
   };
+  resetFill(p);
+  cache.set(p.id, p);
   await DB.savePuzzle(p);
   go(`#/p/${p.id}/grid`);
 }
 
 async function homeView() {
-  const puzzles = await DB.listPuzzles();
+  const puzzles = (await DB.listPuzzles()).map(p => cache.get(p.id) || p);
   const list = puzzles.length
     ? h('ul', { class: 'library' }, puzzles.map(p => {
         const pct = progressOf(p);
-        const stageLabel = { corners: 'Finding grid…', grid: 'Checking grid…', clues: 'Adding clues…' }[p.stage];
-        return h('li', { onclick: () => go(`#/p/${p.id}/${p.stage || 'solve'}`) },
+        return h('li', { onclick: () => go(`#/p/${p.id}/solve`) },
           miniGrid(p),
           h('div', { class: 'meta' },
             h('div', { class: 'title' }, p.title),
-            h('div', { class: 'sub' }, stageLabel || (pct === null ? '' : `${pct}% filled`) ,
-              ' · ', new Date(p.updated).toLocaleDateString())));
+            h('div', { class: 'sub' },
+              jobs.has(p.id) ? 'Reading clues…' : (pct === null ? '' : `${pct}% filled`),
+              ' · ', new Date(p.updated || p.created).toLocaleDateString())));
       }))
     : h('div', { class: 'empty' },
         h('div', { class: 'big' }, '▦'),
@@ -236,22 +386,17 @@ async function homeView() {
       list));
 }
 
-// ---------- step 1: corners ----------
+// ---------- fix grid: corners ----------
 
 async function cornersView(p) {
   const { img, url } = await loadImage(p.image);
   onCleanup(() => URL.revokeObjectURL(url));
   const IW = img.naturalWidth, IH = img.naturalHeight;
-
-  const autoDetect = () => {
-    const { canvas, scale } = scaledCanvas(img, 1000);
-    return V.detectGridCorners(grayOf(canvas)).map(([x, y]) => [x / scale, y / scale]);
-  };
-  if (!p.corners) { p.corners = autoDetect(); saveSoon(p); }
+  if (!p.corners) { p.corners = findCorners(img); saveSoon(p); }
 
   const canvas = h('canvas', { class: 'stage-canvas' });
   const stage = h('div', { class: 'stage' }, canvas);
-  let view = { s: 1, ox: 0, oy: 0, w: 0, h: 0 };
+  const view = { s: 1, ox: 0, oy: 0, w: 0, h: 0 };
   let active = -1, pointer = null;
 
   const toScreen = ([x, y]) => [view.ox + x * view.s, view.oy + y * view.s];
@@ -275,7 +420,6 @@ async function cornersView(p) {
     ctx.fillStyle = '#111'; ctx.fillRect(0, 0, view.w, view.h);
     ctx.drawImage(img, view.ox, view.oy, IW * view.s, IH * view.s);
     const pts = p.corners.map(toScreen);
-    // dim outside the grid
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, view.w, view.h);
     ctx.moveTo(...pts[0]); pts.slice(1).forEach(q => ctx.lineTo(...q)); ctx.closePath();
@@ -291,7 +435,7 @@ async function cornersView(p) {
     if (active >= 0) drawLoupe(ctx, pts[active]);
   }
 
-  function drawLoupe(ctx, [px, py]) {
+  function drawLoupe(ctx, [px]) {
     const R = 64, zoom = 3;
     const cx = px < view.w / 2 ? view.w - R - 12 : R + 12, cy = R + 12;
     const [ix, iy] = p.corners[active];
@@ -333,64 +477,64 @@ async function cornersView(p) {
   canvas.addEventListener('pointercancel', end);
 
   async function rotate(dir) {
+    if (p.fill.some(Boolean) && !confirm('Rotating re-detects the grid and clears your answers. Continue?')) return;
     const c = document.createElement('canvas');
     c.width = IH; c.height = IW;
     const ctx = c.getContext('2d');
     ctx.translate(IH / 2, IW / 2); ctx.rotate(dir * Math.PI / 2); ctx.drawImage(img, -IW / 2, -IH / 2);
     p.image = await canvasToBlob(c, 0.9);
+    p.imageWidth = IH;
     p.corners = null;
+    p.detectedFor = null;
     await DB.savePuzzle(p);
     route();
   }
 
   app.replaceChildren(
-    header('1. Find the grid', { back: '#/' }),
+    header('Fix grid: corners', { back: `#/p/${p.id}/solve` }),
     h('p', { class: 'hint' }, 'Drag the four circles onto the outer corners of the crossword grid.'),
     stage,
     h('div', { class: 'toolbar' },
       h('button', { onclick: () => rotate(-1), 'aria-label': 'Rotate left' }, '⟲'),
       h('button', { onclick: () => rotate(1), 'aria-label': 'Rotate right' }, '⟳'),
-      h('button', { onclick: () => { p.corners = autoDetect(); saveSoon(p); draw(); } }, 'Auto'),
+      h('button', { onclick: () => { p.corners = findCorners(img); saveSoon(p); draw(); } }, 'Auto'),
       h('span', { class: 'grow' }),
-      h('button', { class: 'primary', onclick: async () => { p.stage = 'grid'; await DB.savePuzzle(p); go(`#/p/${p.id}/grid`); } }, 'Next ›')));
+      h('button', { class: 'primary', onclick: () => go(`#/p/${p.id}/grid`) }, 'Next ›')));
 
   const ro = new ResizeObserver(layout);
   ro.observe(stage);
   onCleanup(() => ro.disconnect());
 }
 
-// ---------- step 2: grid ----------
-
-function resetFill(p) {
-  p.fill = new Array(p.rows * p.cols).fill('');
-}
+// ---------- fix grid: squares ----------
 
 async function gridView(p) {
-  let warpCanvas = null, warpGray = null;
+  let warpCanvas = null, warpGray = null, img = null;
   let showPhoto = !!p.image;
   let symmetric = !p.image;
 
   if (p.image) {
-    const { img, url } = await loadImage(p.image);
-    URL.revokeObjectURL(url);
-    const { canvas, scale } = scaledCanvas(img, 1800);
-    const corners = p.corners.map(([x, y]) => [x * scale, y * scale]);
-    warpGray = V.warpGray(grayOf(canvas), corners, 900, 900);
-    warpCanvas = grayToCanvas(warpGray);
+    const loaded = await loadImage(p.image);
+    img = loaded.img;
+    onCleanup(() => URL.revokeObjectURL(loaded.url));
+    if (!p.corners) p.corners = findCorners(img);
     const key = JSON.stringify(p.corners);
-    if (!p.blocks || p.detectedFor !== key) {
-      const size = V.detectGridSize(warpGray);
-      p.rows = size.rows; p.cols = size.cols;
-      p.blocks = V.classifyCells(warpGray, p.rows, p.cols);
-      p.detectedFor = key;
-      resetFill(p);
+    const fresh = p.detectedFor !== key;
+    const g = analyzeGrid(img, p.corners, fresh ? null : { rows: p.rows, cols: p.cols });
+    warpGray = g.warp;
+    warpCanvas = grayToCanvas(warpGray);
+    if (fresh) {
+      const sameSize = g.rows === p.rows && g.cols === p.cols;
+      p.rows = g.rows; p.cols = g.cols; p.blocks = g.blocks; p.detectedFor = key;
+      if (!sameSize || !p.fill) resetFill(p);
+      else p.blocks.forEach((b, i) => { if (b) p.fill[i] = ''; });
       saveSoon(p);
     }
   }
 
   const canvas = h('canvas', { class: 'stage-canvas' });
   const stage = h('div', { class: 'stage' }, canvas);
-  let view = { x: 0, y: 0, w: 0, h: 0, cs: 0 };
+  const view = { x: 0, y: 0, w: 0, h: 0, cs: 0, W: 0, H: 0 };
 
   function layout() {
     const W = stage.clientWidth, H = stage.clientHeight;
@@ -403,15 +547,13 @@ async function gridView(p) {
   }
 
   function draw() {
+    if (!view.W) return;
     const ctx = fitCanvas(canvas, view.W, view.H);
     ctx.clearRect(0, 0, view.W, view.H);
     const { x, y, w, h: hh, cs } = view;
-    const num = P.numberGrid(p.rows, p.cols, p.blocks);
-    if (showPhoto && warpCanvas) {
-      ctx.drawImage(warpCanvas, x, y, w, hh);
-    } else {
-      ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, hh);
-    }
+    const num = numbering(p);
+    if (showPhoto && warpCanvas) ctx.drawImage(warpCanvas, x, y, w, hh);
+    else { ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, hh); }
     for (let r = 0; r < p.rows; r++) for (let c = 0; c < p.cols; c++) {
       const i = r * p.cols + c;
       if (p.blocks[i]) {
@@ -440,9 +582,8 @@ async function gridView(p) {
     if (c < 0 || row < 0 || c >= p.cols || row >= p.rows) return;
     const i = row * p.cols + c;
     const v = p.blocks[i] ? 0 : 1;
-    p.blocks[i] = v;
-    if (symmetric) p.blocks[p.rows * p.cols - 1 - i] = v;
-    resetFill(p);
+    const cellsToSet = symmetric ? [i, p.rows * p.cols - 1 - i] : [i];
+    for (const j of cellsToSet) { p.blocks[j] = v; p.fill[j] = ''; }
     saveSoon(p);
     draw();
   });
@@ -462,45 +603,41 @@ async function gridView(p) {
   const stepper = (label, out, d) => h('div', { class: 'stepper' },
     h('span', {}, label),
     h('button', { onclick: () => d(-1) }, '−'), out, h('button', { onclick: () => d(1) }, '+'));
-
-  const photoToggle = h('button', { class: showPhoto ? 'on' : '', onclick: () => { showPhoto = !showPhoto; photoToggle.className = showPhoto ? 'on' : ''; draw(); } }, 'Photo');
-  const symToggle = h('button', { class: symmetric ? 'on' : '', onclick: () => { symmetric = !symmetric; symToggle.className = symmetric ? 'on' : ''; } }, 'Symmetry');
+  const toggle = (label, get, set) => {
+    const b = h('button', { class: get() ? 'on' : '', onclick: () => { set(!get()); b.className = get() ? 'on' : ''; draw(); } }, label);
+    return b;
+  };
 
   app.replaceChildren(
-    header('2. Check the grid', { back: p.image ? `#/p/${p.id}/corners` : '#/' }),
+    header(p.image ? 'Fix grid: squares' : 'Edit grid', { back: p.image ? `#/p/${p.id}/corners` : `#/p/${p.id}/solve` }),
     h('p', { class: 'hint' }, p.image
-      ? 'Make sure the red lines sit on the grid lines. Tap a square to switch it between black and white.'
+      ? 'The red lines should sit on the grid lines (if not, go back and move the corners). Tap a square to switch it between black and white.'
       : 'Tap squares to make them black.'),
     stage,
     h('div', { class: 'toolbar wrap' },
       stepper('Rows', rowsOut, d => setSize(p.rows + d, p.cols)),
       stepper('Cols', colsOut, d => setSize(p.rows, p.cols + d)),
-      p.image ? photoToggle : null,
-      symToggle,
+      p.image ? toggle('Photo', () => showPhoto, v => { showPhoto = v; }) : null,
+      toggle('Symmetry', () => symmetric, v => { symmetric = v; }),
       info),
     h('div', { class: 'toolbar' },
       p.image ? h('button', { onclick: () => { p.detectedFor = null; route(); } }, 'Re-detect') : null,
       h('span', { class: 'grow' }),
-      h('button', { class: 'primary', onclick: async () => {
-        if (!p.fill || p.fill.length !== p.rows * p.cols) resetFill(p);
-        p.stage = p.stage === 'solve' ? 'solve' : 'clues';
-        await DB.savePuzzle(p);
-        go(`#/p/${p.id}/clues`);
-      } }, 'Next ›')));
+      h('button', { class: 'primary', onclick: () => go(`#/p/${p.id}/solve`) }, 'Done')));
 
   const ro = new ResizeObserver(layout);
   ro.observe(stage);
   onCleanup(() => ro.disconnect());
 }
 
-// ---------- step 3: clues ----------
+// ---------- edit clues ----------
 
-function regionPicker(img, onPick) {
-  // Lets the user drag a rectangle over the image. Calls onPick([x0,y0,x1,y1]) in image px.
+function regionPicker(img) {
   const IW = img.naturalWidth, IH = img.naturalHeight;
   const canvas = h('canvas', { class: 'stage-canvas' });
   const stage = h('div', { class: 'stage picker' }, canvas);
-  let view = { s: 1, ox: 0, oy: 0, w: 0, h: 0 }, rect = null, dragFrom = null;
+  const view = { s: 1, ox: 0, oy: 0, w: 0, h: 0 };
+  let rect = null, dragFrom = null;
   const toImg = e => {
     const r = canvas.getBoundingClientRect();
     return [Math.min(IW, Math.max(0, (e.clientX - r.left - view.ox) / view.s)),
@@ -539,23 +676,12 @@ function regionPicker(img, onPick) {
   return { el: stage, getRect };
 }
 
-function ocrCanvas(img, [x0, y0, x1, y1]) {
-  const w = x1 - x0, hh = y1 - y0;
-  const s = Math.min(3, Math.max(1, 1600 / w));
-  const c = document.createElement('canvas');
-  c.width = Math.round(w * s); c.height = Math.round(hh * s);
-  const ctx = c.getContext('2d');
-  ctx.filter = 'grayscale(1) contrast(1.3)';
-  ctx.drawImage(img, x0, y0, w, hh, 0, 0, c.width, c.height);
-  return c;
-}
-
 async function cluesView(p) {
-  const num = P.numberGrid(p.rows, p.cols, p.blocks);
+  const num = numbering(p);
   p.cluesText = p.cluesText || { across: '', down: '' };
+  const boxes = {}, status = {};
+  const jobLine = h('div', { class: 'job-line' });
 
-  const boxes = {};
-  const status = {};
   function refresh() {
     p.cluesText = { across: boxes.across.value, down: boxes.down.value };
     p.clues = P.cluesFromText(p.cluesText);
@@ -567,54 +693,59 @@ async function cluesView(p) {
     }
     saveSoon(p);
   }
-
-  function addText(dir, list) {
-    if (!list.length) return;
-    const box = boxes[dir];
-    box.value = (box.value.trim() ? box.value.trim() + '\n' : '') + P.cluesToText(list);
+  function showJob() {
+    jobLine.textContent = jobs.has(p.id) ? jobLabel(p.id) : '';
+    jobLine.hidden = !jobs.has(p.id);
   }
+  listen(bus, 'clues', e => {
+    if (e.detail.id !== p.id) return;
+    if (e.detail.done) { boxes.across.value = p.cluesText.across; boxes.down.value = p.cluesText.down; refresh(); }
+    showJob();
+  });
 
-  async function scan(dir) {
-    let img = null, url = null;
-    const pickSource = async src => {
-      const blob = src === 'puzzle' ? p.image : await filePicker();
-      if (!blob) return;
-      if (src !== 'puzzle') { p.clueImage = await normalizeImport(blob); saveSoon(p); }
-      ({ img, url } = await loadImage(src === 'puzzle' ? p.image : p.clueImage));
-      onCleanup(() => URL.revokeObjectURL(url));
-      showPicker();
-    };
+  async function scanArea(dir) {
+    let img = null;
     const body = h('div', { class: 'scan' });
-    const s = sheet(`Scan ${dir} clues`, body);
-    s.el.classList.add('tall');
-
-    const choose = () => body.replaceChildren(
+    const s = sheet(`Read ${dir} clues from an area`, body, { tall: true });
+    const pickSource = async src => {
+      if (src === 'new') {
+        const f = await filePicker();
+        if (!f) return;
+        p.clueImage = await normalizeImport(f);
+        saveSoon(p);
+      }
+      const loaded = await loadImage(src === 'puzzle' ? p.image : p.clueImage);
+      onCleanup(() => URL.revokeObjectURL(loaded.url));
+      img = loaded.img;
+      showPicker(src === 'puzzle');
+    };
+    body.replaceChildren(
       h('p', {}, 'Where are the clues?'),
       h('div', { class: 'cta' },
         p.image ? h('button', { onclick: () => pickSource('puzzle') }, 'In the crossword photo') : null,
-        p.clueImage ? h('button', { onclick: async () => { ({ img, url } = await loadImage(p.clueImage)); showPicker(); } }, 'In my clue photo') : null,
+        p.clueImage ? h('button', { onclick: () => pickSource('clue') }, 'In my clue photo') : null,
         h('button', { onclick: () => pickSource('new') }, 'In a different photo')));
 
-    function showPicker() {
-      const picker = regionPicker(img, () => {});
+    function showPicker(isPuzzlePhoto) {
+      const picker = regionPicker(img);
       const prog = h('div', { class: 'progress' });
       const run = async whole => {
-        const rect = whole ? [0, 0, img.naturalWidth, img.naturalHeight] : picker.getRect();
-        if (!rect) return toast('Drag a box around the clues first');
-        prog.textContent = 'Starting text recognition…';
+        const rect = whole ? null : picker.getRect();
+        if (!whole && !rect) return toast('Drag a box around the clues first');
         buttons.forEach(b => { b.disabled = true; });
         try {
-          const text = await recognizeText(ocrCanvas(img, rect), m => {
-            if (m.status === 'recognizing text') prog.textContent = `Reading clues… ${Math.round(m.progress * 100)}%`;
-            else if (m.status) prog.textContent = m.status.replace(/^\w/, c => c.toUpperCase()) + '…';
-          });
-          const parsed = P.parseClueText(text, dir);
-          addText('across', parsed.across);
-          addText('down', parsed.down);
+          const text = await readClueText(img, { rect, exclude: isPuzzlePhoto ? p.corners : null },
+            m => { prog.textContent = m.label + (m.progress != null ? ` ${Math.round(m.progress * 100)}%` : '') + '…'; });
+          const rec = cluesFromOcr(text, num, dir);
+          for (const d of ['across', 'down']) {
+            if (!rec[d].length) continue;
+            const box = boxes[d];
+            box.value = (box.value.trim() ? box.value.trim() + '\n' : '') + P.cluesToText(rec[d]);
+          }
           refresh();
           s.close();
-          const n = parsed.across.length + parsed.down.length;
-          toast(n ? `Found ${n} clues — check them for mistakes` : 'No numbered clues found. Try a tighter box.', 3500);
+          const n = rec.across.length + rec.down.length;
+          toast(n ? `Added ${n} clues` : 'No numbered clues found there. Try a different box.', 3500);
         } catch (err) {
           prog.textContent = err.message || String(err);
           buttons.forEach(b => { b.disabled = false; });
@@ -625,10 +756,9 @@ async function cluesView(p) {
         h('button', { class: 'primary', onclick: () => run(false) }, 'Read selection'),
       ];
       body.replaceChildren(
-        h('p', { class: 'hint' }, `Drag a box around the ${dir} clues (or both lists — “Across”/“Down” headings are recognised).`),
+        h('p', { class: 'hint' }, `Drag a box around the clues. “Across” and “Down” headings are recognised; text without one goes to ${dir}.`),
         picker.el, prog, h('div', { class: 'toolbar' }, h('span', { class: 'grow' }), buttons));
     }
-    choose();
   }
 
   const section = dir => {
@@ -641,39 +771,50 @@ async function cluesView(p) {
     status[dir] = h('span', { class: 'status' });
     return h('section', { class: 'clue-edit' },
       h('div', { class: 'row' },
-        h('h2', {}, dir === 'across' ? 'Across' : 'Down'), status[dir], h('span', { class: 'grow' }),
-        h('button', { class: 'small', onclick: () => scan(dir) }, '📷 Scan')),
+        h('h2', {}, dirLabel(dir)), status[dir], h('span', { class: 'grow' }),
+        h('button', { class: 'small', onclick: () => scanArea(dir) }, '📷 From area')),
       boxes[dir]);
   };
 
+  const photos = [p.image, p.clueImage].filter(Boolean);
   app.replaceChildren(
-    header('3. Clues', { back: `#/p/${p.id}/grid` }),
+    header('Edit clues', {
+      back: `#/p/${p.id}/solve`,
+      actions: [h('button', { class: 'small primary', onclick: () => go(`#/p/${p.id}/solve`) }, 'Done')],
+    }),
+    photos.length ? photoPane(photos, { className: 'top', side: clueSide(p) }) : null,
     h('main', { class: 'scroll pad' },
-      h('p', { class: 'hint' }, 'Scan the clues from a photo, or type them: one per line, starting with the clue number. You can also skip this and read clues from the photo while solving.'),
-      section('across'), section('down')),
-    h('div', { class: 'toolbar' },
-      h('span', { class: 'grow' }),
-      h('button', { class: 'primary', onclick: async () => {
-        refresh(); flushSave();
-        p.stage = 'solve';
-        await DB.savePuzzle(p);
-        go(`#/p/${p.id}/solve`);
-      } }, 'Solve ›')));
+      jobLine,
+      h('p', { class: 'hint' }, 'One clue per line, starting with its number. Compare with the photo above (pinch or +/− to zoom).'),
+      section('across'), section('down'),
+      p.image ? h('button', {
+        onclick: () => {
+          if ((boxes.across.value.trim() || boxes.down.value.trim()) && !confirm('Replace all clues with a fresh reading of the photo?')) return;
+          startClueJob(p, { replace: true });
+          showJob();
+        },
+      }, '↻ Read all clues again') : null));
   refresh();
+  showJob();
 }
 
-// ---------- step 4: solve ----------
+// ---------- solve ----------
 
 async function solveView(p) {
   if (!p.blocks) return go(`#/p/${p.id}/${p.image ? 'corners' : 'grid'}`);
   const N = p.rows * p.cols;
   if (!p.fill || p.fill.length !== N) resetFill(p);
-  const num = P.numberGrid(p.rows, p.cols, p.blocks);
+  p.cluesText = p.cluesText || { across: '', down: '' };
+  p.clues = p.clues || { across: {}, down: {} };
+  // Resume clue reading that was interrupted (e.g. app closed mid-way).
+  if (p.cluesStatus === 'pending' && !jobs.has(p.id)) startClueJob(p);
+
+  const num = numbering(p);
   const allWords = [...num.across, ...num.down];
-  const clueText = w => (p.clues && p.clues[w.dir] && p.clues[w.dir][w.num]) || '';
+  if (!allWords.length) return go(`#/p/${p.id}/grid`);
+  const clueText = w => (p.clues[w.dir] && p.clues[w.dir][w.num]) || '';
   const wordOf = (i, d) => { const k = (d === 'across' ? num.acrossOf : num.downOf)[i]; return k < 0 ? null : num[d][k]; };
 
-  if (!allWords.length) return go(`#/p/${p.id}/grid`);
   let sel = allWords[0].cells[0];
   let dir = allWords[0].dir;
   if (p.cursor && p.cursor.i < N && wordOf(p.cursor.i, p.cursor.dir)) { sel = p.cursor.i; dir = p.cursor.dir; }
@@ -696,20 +837,24 @@ async function solveView(p) {
   const clueBar = h('div', { class: 'cluebar' },
     h('button', { class: 'icon', 'aria-label': 'Previous clue', onpointerdown: e => { e.preventDefault(); jumpWord(-1); } }, '‹'),
     h('div', { class: 'clue-mid', onpointerdown: e => { e.preventDefault(); toggleDir(); } }, clueLabel),
+    h('button', { class: 'icon edit', 'aria-label': 'Edit this clue', onclick: () => editClue() }, '✎'),
     h('button', { class: 'icon', 'aria-label': 'Next clue', onpointerdown: e => { e.preventDefault(); jumpWord(1); } }, '›'));
 
   // clue list
   const listItems = new Map();
-  const clueList = h('div', { class: 'cluelist' },
-    ['across', 'down'].map(d => h('section', {},
-      h('h3', {}, d === 'across' ? 'Across' : 'Down'),
+  const clueList = h('div', { class: 'cluelist' });
+  function renderList() {
+    listItems.clear();
+    clueList.replaceChildren(...['across', 'down'].map(d => h('section', {},
+      h('h3', {}, dirLabel(d)),
       h('ol', {}, num[d].map(w => {
         const li = h('li', { onclick: () => { selectWord(w); document.body.classList.remove('list-open'); } },
           h('b', {}, w.num), h('span', {}, clueText(w) || h('i', {}, `(${w.cells.length})`)));
         listItems.set(w, li);
         return li;
       })))));
-  onCleanup(() => document.body.classList.remove('list-open'));
+  }
+  renderList();
 
   // keyboard
   const keyRows = ['QWERTYUIOP', 'ASDFGHJKL', '⇄ZXCVBNM⌫'];
@@ -732,8 +877,11 @@ async function solveView(p) {
     }
     if (w) {
       const t = clueText(w);
-      clueLabel.replaceChildren(h('b', {}, `${w.num}${dir === 'across' ? 'A' : 'D'}`), ' ',
-        t || h('i', {}, `No clue text — ${w.cells.length} letters`));
+      let fallback;
+      if (jobs.has(p.id)) fallback = jobLabel(p.id);
+      else if (p.cluesStatus === 'failed') fallback = `Couldn't read the clues — tap ✎ (${w.cells.length} letters)`;
+      else fallback = `No clue text — ${w.cells.length} letters · tap ✎ to add`;
+      clueLabel.replaceChildren(h('b', {}, `${w.num}${dir === 'across' ? 'A' : 'D'}`), ' ', t || h('i', {}, fallback));
     } else clueLabel.textContent = '';
     for (const [word, li] of listItems) {
       li.classList.toggle('current', word === w);
@@ -757,13 +905,12 @@ async function solveView(p) {
     if (i === sel) toggleDir();
     else {
       sel = i;
-      if (!wordOf(i, dir)) dir = dir === 'across' ? 'down' : 'across';
+      if (!wordOf(i, dir)) dir = otherDir(dir);
       update();
     }
   }
   function toggleDir() {
-    const other = dir === 'across' ? 'down' : 'across';
-    if (wordOf(sel, other)) { dir = other; update(); }
+    if (wordOf(sel, otherDir(dir))) { dir = otherDir(dir); update(); }
   }
   function selectWord(w, empty = true) {
     dir = w.dir;
@@ -821,7 +968,21 @@ async function solveView(p) {
     else if (e.key === 'ArrowDown') { move(1, 0); e.preventDefault(); }
   });
 
-  // size the grid to fit its area
+  // Background clue reading: show progress, then the clues.
+  listen(bus, 'clues', e => {
+    if (e.detail.id !== p.id) return;
+    if (e.detail.done) {
+      renderList();
+      if (e.detail.error) toast(`Couldn't read the clues: ${e.detail.error}`, 4500);
+      else {
+        const r = e.detail.report;
+        const found = r.across.found + r.down.found, total = r.across.total + r.down.total;
+        toast(found === total ? `Clues loaded (${total}). Tap ✎ to fix any typos.` : `Read ${found} of ${total} clues. Tap ✎ to add the rest.`, 4500);
+      }
+    }
+    update();
+  });
+
   function layout() {
     // Leave room for the 1px gaps between cells and the 2px outer border.
     const W = gridWrap.clientWidth - 8 - 4 - (p.cols - 1);
@@ -833,24 +994,32 @@ async function solveView(p) {
   ro.observe(gridWrap);
   onCleanup(() => ro.disconnect());
 
-  // photo viewer
-  async function showPhoto() {
-    const blobs = [p.image, p.clueImage].filter(Boolean);
-    if (!blobs.length) return toast('This puzzle has no photo');
-    let zoom = 1;
-    const imgs = await Promise.all(blobs.map(async b => {
-      const { img, url } = await loadImage(b);
-      onCleanup(() => URL.revokeObjectURL(url));
-      return img;
-    }));
-    const holder = h('div', { class: 'photo-holder' }, imgs);
-    const setZoom = z => { zoom = Math.min(5, Math.max(1, z)); imgs.forEach(i => { i.style.width = zoom * 100 + '%'; }); };
-    const s = sheet('Photo', h('div', { class: 'photo-view' },
-      holder,
-      h('div', { class: 'toolbar' },
-        h('button', { onclick: () => setZoom(zoom / 1.5) }, '−'),
-        h('button', { onclick: () => setZoom(zoom * 1.5) }, '+'))));
-    s.el.classList.add('tall');
+  // Edit the current clue, with the photo for reference.
+  function editClue() {
+    const w = wordOf(sel, dir);
+    if (!w) return;
+    const input = h('textarea', { class: 'clue-input', rows: 3, spellcheck: 'true' });
+    input.value = clueText(w);
+    const save = () => {
+      p.cluesText[w.dir] = P.setClueLine(p.cluesText[w.dir], w.num, input.value);
+      p.clues = P.cluesFromText(p.cluesText);
+      saveSoon(p);
+      renderList();
+      update();
+      s.close();
+    };
+    const photos = [p.image, p.clueImage].filter(Boolean);
+    const s = sheet(`${w.num} ${dirLabel(w.dir)} · ${w.cells.length} letters`, h('div', { class: 'edit-clue' },
+      photos.length ? photoPane(photos, { className: 'in-sheet', side: clueSide(p) }) : null,
+      h('div', { class: 'pad' },
+        input,
+        h('div', { class: 'toolbar flat' },
+          h('button', { class: 'small', onclick: () => go(`#/p/${p.id}/clues`) }, 'All clues…'),
+          p.image && !jobs.has(p.id) && p.cluesStatus === 'failed'
+            ? h('button', { class: 'small', onclick: () => { startClueJob(p); s.close(); update(); } }, '↻ Try reading again') : null,
+          h('span', { class: 'grow' }),
+          h('button', { class: 'primary', onclick: save }, 'Save')))), { tall: photos.length > 0 });
+    setTimeout(() => input.focus(), 50);
   }
 
   function anagram() {
@@ -858,7 +1027,7 @@ async function solveView(p) {
     const pattern = w ? w.cells.map(i => p.fill[i] || '·').join('') : '';
     const input = h('input', { type: 'text', placeholder: 'Letters to rearrange', autocapitalize: 'characters', autocomplete: 'off', spellcheck: 'false' });
     const wheel = h('div', { class: 'wheel' });
-    const draw = (shuffle) => {
+    const draw = shuffle => {
       const letters = [...input.value.toUpperCase().replace(/[^A-Z]/g, '')];
       if (shuffle) for (let i = letters.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [letters[i], letters[j]] = [letters[j], letters[i]]; }
       wheel.replaceChildren(...letters.map((l, k) => {
@@ -871,18 +1040,25 @@ async function solveView(p) {
     sheet('Anagram helper', h('div', { class: 'anagram' },
       pattern ? h('p', { class: 'pattern' }, 'Current answer: ', h('code', {}, pattern), ` (${pattern.length})`) : null,
       input, wheel,
-      h('div', { class: 'toolbar' }, h('span', { class: 'grow' }), h('button', { class: 'primary', onclick: () => draw(true) }, 'Shuffle'))));
+      h('div', { class: 'toolbar flat' }, h('span', { class: 'grow' }), h('button', { class: 'primary', onclick: () => draw(true) }, 'Shuffle'))));
     setTimeout(() => input.focus(), 50);
+  }
+
+  function showPhoto() {
+    const photos = [p.image, p.clueImage].filter(Boolean);
+    if (!photos.length) return toast('This puzzle has no photo');
+    sheet('Photo', photoPane(photos, { className: 'in-sheet full' }), { tall: true });
   }
 
   function menu() {
     const s = sheet('Puzzle', h('div', { class: 'menu' },
       h('button', { onclick: () => { s.close(); anagram(); } }, '🔀  Anagram helper'),
       h('button', { onclick: () => go(`#/p/${p.id}/clues`) }, '✏️  Edit clues'),
-      h('button', { onclick: () => {
-        if (p.fill.some(Boolean) && !confirm('Editing the grid clears your answers. Continue?')) return;
-        go(`#/p/${p.id}/${p.image ? 'corners' : 'grid'}`);
-      } }, '▦  Edit grid'),
+      h('button', { onclick: () => go(`#/p/${p.id}/${p.image ? 'corners' : 'grid'}`) }, '▦  Fix grid'),
+      p.image ? h('button', { onclick: () => {
+        if (!confirm('Read all clues from the photo again? This replaces the current clues.')) return;
+        startClueJob(p, { replace: true }); s.close(); update();
+      } }, '↻  Read clues again') : null,
       h('button', { onclick: () => {
         const t = prompt('Name this puzzle:', p.title);
         if (t) { p.title = t.trim(); titleEl.textContent = p.title; saveSoon(p); }
@@ -894,7 +1070,10 @@ async function solveView(p) {
       } }, '🧹  Clear answers'),
       h('button', { class: 'danger', onclick: async () => {
         if (!confirm('Delete this puzzle?')) return;
-        await DB.deletePuzzle(p.id); go('#/');
+        pendingSaves.delete(p);
+        cache.delete(p.id);
+        await DB.deletePuzzle(p.id);
+        go('#/');
       } }, '🗑  Delete puzzle')));
   }
 
