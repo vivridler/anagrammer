@@ -360,8 +360,8 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
 }
 
 /* ---- references between clues ---- */
-.ref { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; }
-.ref-ans { font-weight: 700; letter-spacing: .03em; }
+.ref { color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; }
+.ref-ans { font-weight: inherit; letter-spacing: .03em; }
 .clue-deps { font-size: 13px; color: var(--muted); margin-top: 2px; }
 .cluelist .li-text { flex: 1; min-width: 0; }
 .cluebar .clue-deps { font-size: 12px; }
