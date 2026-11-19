@@ -351,10 +351,9 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
 .key.pencil-key.on { background: var(--accent); color: #fff; }
 .kbd.pencil .key.pencil-key { color: #fff; }
 
-/* ---- header owns the status-bar area, so nothing sits under the Dynamic Island ---- */
+/* ---- header: the app no longer draws under the status bar (no viewport-fit=cover), so the
+   iPhone's blurred top strip stays above it. The insets below are 0 then, kept as a safety net. ---- */
 #app { padding-top: 0; }
 .bar { padding-top: calc(env(safe-area-inset-top) + 6px); }
-@supports (-webkit-touch-callout: none) {
-  /* iPhone/iPad: a little extra room below the status bar's blurred edge. */
-  .bar { padding-top: calc(env(safe-area-inset-top) + 10px); }
-}
+/* Anything the phone draws outside the app (e.g. below it) matches the keyboard while solving. */
+html:has(body.solving) { background: var(--line); }
