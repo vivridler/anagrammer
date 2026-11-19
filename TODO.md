@@ -21,6 +21,9 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   bar or tap a square twice to switch direction).
 - [x] **Swipe the clue bar** left/right for the next/previous clue; arrows removed.
 - [x] **Skip finished clues** (no empty and no pencilled squares) when moving to the next clue.
+- [ ] **Setter's note** – show a note or instruction from the setter for the crossword. *(Details to be agreed
+  first: where the note comes from and where it's shown.)*
+- [ ] **Tidy the top bar** – move the *Edit clue* and *Show photo* buttons into the ⋯ menu.
 
 ## Notes on how these work
 
