@@ -29,18 +29,18 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   (20 Nov): that moved the keyboard down the screen, so it was undone. Needs another approach.
 - [ ] **External references menu** – a second menu next to ⋯ with look-ups, e.g. search a word on Power
   Thesaurus or Wikipedia, search the clue online. *(Needs working out first.)*
-- [ ] **Edit the clue from the photo screen** – when viewing the photo, be able to edit the current clue right
+- [x] **Edit the clue from the photo screen** – when viewing the photo, be able to edit the current clue right
   there, without going back to the menu.
-- [ ] **Stay on the last square** – after typing the final letter of an answer, keep the cursor on that square
+- [x] **Stay on the last square** – after typing the final letter of an answer, keep the cursor on that square
   instead of jumping to the next clue. (Multi-part answers still carry on into their next part.)
-- [ ] **Show referenced answers in clues** – when a clue mentions another entry (e.g. "Dispute cited beer?
+- [x] **Show referenced answers in clues** – when a clue mentions another entry (e.g. "Dispute cited beer?
   That's 24-down"), show that entry's answer once it's filled in, in capitals: either replacing the reference
-  ("That's CASSAVA") or after it in square brackets ("That's 24-down [CASSAVA]"). Plan: the bracket version,
-  so the original wording stays visible.
-- [ ] **Tap a reference to jump to it** – in clues that mention another entry (e.g. "That's 24-down"), tapping
+  ("That's CASSAVA") or after it in square brackets ("That's 24-down [CASSAVA]"). Done as the bracket
+  version, so the original wording stays visible.
+- [x] **Tap a reference to jump to it** – in clues that mention another entry (e.g. "That's 24-down"), tapping
   the reference moves to that clue.
-- [ ] *(Maybe)* **Show which clues depend on this one** – e.g. 24-down shows "Mentioned in 10A, 12A", so you can
-  see which clues use its answer.
+- [x] **Show which clues depend on this one** – e.g. 24-down shows "Mentioned in 10A, 12A" (tappable), so you
+  can see which clues use its answer.
 
 ## Notes on how these work
 

@@ -358,3 +358,11 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
   /* iPhone/iPad: a little extra room below the status bar's blurred edge. */
   .bar { padding-top: calc(env(safe-area-inset-top) + 10px); }
 }
+
+/* ---- references between clues ---- */
+.ref { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; }
+.ref-ans { font-weight: 700; letter-spacing: .03em; }
+.clue-deps { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.cluelist .li-text { flex: 1; min-width: 0; }
+.cluebar .clue-deps { font-size: 12px; }
+.edit-clue.big .clue-input { font-size: 16px; }

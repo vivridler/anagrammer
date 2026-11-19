@@ -825,6 +825,38 @@ async function solveView(p) {
   let navWords = allWords;
   const isComplete = () => p.fill.every((v, i) => p.blocks[i] || v);
 
+  // References between clues ("That's 24-down"): who mentions whom.
+  let mentionedIn = new Map(); // main word -> [main words whose clue mentions it]
+  let anyRefs = false;
+  const answerOf = w => {
+    const letters = groupWords(w).flatMap(x => x.cells).map(i => p.fill[i]);
+    return letters.every(Boolean) ? letters.join('') : '';
+  };
+  const refSpan = w => h('span', { class: 'ref', 'data-dir': w.dir, 'data-num': w.num }, shortName(w));
+  const refTarget = el => {
+    const r = el && el.closest && el.closest('.ref');
+    return r ? num[r.dataset.dir].find(x => x.num === +r.dataset.num) : null;
+  };
+  // Clue text with tappable references, each followed by its answer once filled in.
+  function clueNodes(text) {
+    const nodes = [];
+    let at = 0;
+    for (const r of P.findRefs(text, num)) {
+      nodes.push(text.slice(at, r.start));
+      nodes.push(h('span', { class: 'ref', 'data-dir': r.word.dir, 'data-num': r.word.num }, text.slice(r.start, r.end)));
+      const ans = answerOf(r.word);
+      if (ans) nodes.push(' ', h('span', { class: 'ref-ans' }, `[${ans}]`));
+      at = r.end;
+    }
+    nodes.push(text.slice(at));
+    return nodes;
+  }
+  function depsLine(w) {
+    const deps = mentionedIn.get(mainOf(w));
+    if (!deps || !deps.length) return null;
+    return h('div', { class: 'clue-deps' }, 'Mentioned in ', ...deps.flatMap((d, k) => (k ? [', ', refSpan(d)] : [refSpan(d)])));
+  }
+
   let sel = allWords[0].cells[0];
   let dir = allWords[0].dir;
   if (p.cursor && p.cursor.i < N && wordOf(p.cursor.i, p.cursor.dir)) { sel = p.cursor.i; dir = p.cursor.dir; }
@@ -867,7 +899,7 @@ async function solveView(p) {
   let swipe = null;
   clueBar.addEventListener('pointerdown', e => {
     e.preventDefault();
-    swipe = { x: e.clientX, y: e.clientY, id: e.pointerId, dx: 0 };
+    swipe = { x: e.clientX, y: e.clientY, id: e.pointerId, dx: 0, ref: refTarget(e.target) };
     clueBar.setPointerCapture(e.pointerId);
     clueSlide.style.transition = 'none';
   });
@@ -879,12 +911,13 @@ async function solveView(p) {
   const endSwipe = cancelled => e => {
     if (!swipe || e.pointerId !== swipe.id) return;
     const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    const ref = swipe.ref;
     swipe = null;
     clueSlide.style.transition = 'transform .18s ease-out';
     clueSlide.style.transform = '';
     if (cancelled) return;
     if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) jumpWord(dx < 0 ? 1 : -1);
-    else if (Math.abs(dx) < 10 && Math.abs(dy) < 10) toggleDir();
+    else if (Math.abs(dx) < 10 && Math.abs(dy) < 10) { if (ref) selectWord(ref); else toggleDir(); }
   };
   clueBar.addEventListener('pointerup', endSwipe(false));
   clueBar.addEventListener('pointercancel', endSwipe(true));
@@ -897,8 +930,10 @@ async function solveView(p) {
     clueList.replaceChildren(...['across', 'down'].map(d => h('section', {},
       h('h3', {}, dirLabel(d)),
       h('ol', {}, num[d].map(w => {
-        const li = h('li', { onclick: () => { selectWord(w); document.body.classList.remove('list-open'); } },
-          h('b', {}, w.num), h('span', {}, P.clueBody(clueText(w)) || h('i', {}, `(${w.cells.length})`)));
+        const body = P.clueBody(clueText(w));
+        const li = h('li', { onclick: e => { selectWord(refTarget(e.target) || w); document.body.classList.remove('list-open'); } },
+          h('b', {}, w.num),
+          h('div', { class: 'li-text' }, h('span', {}, body ? clueNodes(body) : h('i', {}, `(${w.cells.length})`)), mainOf(w) === w ? depsLine(w) : null));
         listItems.set(w, li);
         return li;
       })))));
@@ -919,6 +954,18 @@ async function solveView(p) {
   function refreshClues() {
     groups = P.linkWords(num, p.clues);
     navWords = allWords.filter(w => mainOf(w) === w);
+    mentionedIn = new Map();
+    anyRefs = false;
+    for (const w of navWords) {
+      for (const r of P.findRefs(P.clueBody(clueText(w)), num)) {
+        anyRefs = true;
+        const target = mainOf(r.word);
+        if (target === w || groupWords(w).includes(r.word)) continue; // its own parts
+        const list = mentionedIn.get(target) || [];
+        if (!list.includes(w)) list.push(w);
+        mentionedIn.set(target, list);
+      }
+    }
     renderList();
     renderMarks();
   }
@@ -953,7 +1000,7 @@ async function solveView(p) {
       else if (p.cluesStatus === 'failed') fallback = `Couldn't read the clues — use ⋯ → Edit clue (${len} letters)`;
       else fallback = `No clue text — ${len} letters · ⋯ → Edit clue to add`;
       clueNum.replaceChildren(...parts.map(x => h('span', {}, shortName(x))));
-      clueLabel.replaceChildren(t || h('i', {}, fallback));
+      clueLabel.replaceChildren(...(t ? clueNodes(t) : [h('i', {}, fallback)]), depsLine(main) || '');
     } else { clueNum.textContent = ''; clueLabel.textContent = ''; }
     for (const [word, li] of listItems) {
       li.classList.toggle('current', parts.includes(word));
@@ -966,6 +1013,7 @@ async function solveView(p) {
 
   function changed() {
     saveSoon(p);
+    if (anyRefs) renderList();
     update();
     if (p.completedTime == null && isComplete()) {
       stopTimer();
@@ -1059,10 +1107,7 @@ async function solveView(p) {
       const nextPart = parts[parts.indexOf(w) + 1];
       if (pos < w.cells.length - 1) sel = w.cells[pos + 1];
       else if (nextPart) { dir = nextPart.dir; sel = nextPart.cells[0]; }   // carry on into the next part
-      else {
-        const empty = parts.flatMap(x => x.cells.map(i => [x, i])).find(([, i]) => !p.fill[i]);
-        if (empty) { dir = empty[0].dir; sel = empty[1]; } else jumpWord(1);
-      }
+      // On the answer's last square: stay put (swipe the clue bar to move on).
     }
     changed();
   }
@@ -1130,12 +1175,12 @@ async function solveView(p) {
   onCleanup(() => ro.disconnect());
 
   // Edit the current clue, with the photo for reference.
-  function editClue() {
+  function editClue({ big = false } = {}) {
     const cur = wordOf(sel, dir);
     if (!cur) return;
     const w = mainOf(cur);
     const parts = groupWords(w);
-    const input = h('textarea', { class: 'clue-input', rows: 3, spellcheck: 'true' });
+    const input = h('textarea', { class: 'clue-input', rows: big ? 2 : 3, spellcheck: 'true' });
     input.value = clueText(w);
     const save = () => {
       p.cluesText[w.dir] = P.setClueLine(p.cluesText[w.dir], w.num, input.value);
@@ -1147,8 +1192,9 @@ async function solveView(p) {
     };
     const photos = [p.image, p.clueImage].filter(Boolean);
     const totalLen = parts.reduce((a, x) => a + x.cells.length, 0);
-    const s = sheet(`${parts.map(x => `${x.num} ${dirLabel(x.dir)}`).join(' + ')} · ${totalLen} letters`, h('div', { class: 'edit-clue' },
-      photos.length ? photoPane(photos, { className: 'in-sheet', side: clueSide(p) }) : null,
+    const name = `${parts.map(x => `${x.num} ${dirLabel(x.dir)}`).join(' + ')} · ${totalLen} letters`;
+    const s = sheet(big ? `Photo · ${name}` : name, h('div', { class: 'edit-clue' + (big ? ' big' : '') },
+      photos.length ? photoPane(photos, { className: big ? 'in-sheet full' : 'in-sheet', side: clueSide(p) }) : null,
       h('div', { class: 'pad' },
         input,
         h('div', { class: 'toolbar flat' },
@@ -1157,7 +1203,8 @@ async function solveView(p) {
             ? h('button', { class: 'small', onclick: () => { startClueJob(p); s.close(); update(); } }, '↻ Try reading again') : null,
           h('span', { class: 'grow' }),
           h('button', { class: 'primary', onclick: save }, 'Save')))), { tall: photos.length > 0 });
-    setTimeout(() => input.focus(), 50);
+    // On the photo screen, don't pop the phone keyboard up over the photo straight away.
+    if (!big) setTimeout(() => input.focus(), 50);
   }
 
   function anagram() {
@@ -1182,10 +1229,10 @@ async function solveView(p) {
     setTimeout(() => input.focus(), 50);
   }
 
+  // The photo, with the current clue editable underneath.
   function showPhoto() {
-    const photos = [p.image, p.clueImage].filter(Boolean);
-    if (!photos.length) return toast('This puzzle has no photo');
-    sheet('Photo', photoPane(photos, { className: 'in-sheet full' }), { tall: true });
+    if (![p.image, p.clueImage].some(Boolean)) return toast('This puzzle has no photo');
+    editClue({ big: true });
   }
 
   function menu() {
