@@ -333,3 +333,28 @@ body.list-open .cluelist { display: block; }
 /* ---- keyboard colour runs to the bottom edge (home-bar area) ---- */
 body.solving #app { padding-bottom: 0; }
 body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
+
+/* ---- pencil letters: grey, not italic ---- */
+.cell.pencil .l { font-style: normal; }
+
+/* ---- clue bar: number centred on the left, swipe to change clue ---- */
+.cluebar { overflow: hidden; touch-action: pan-y; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.clue-slide { flex: 1; display: flex; align-items: center; gap: 10px; padding: 6px 14px; min-width: 0; will-change: transform; }
+.clue-num {
+  flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 16px; line-height: 1.2; min-width: 2.4em; text-align: center;
+}
+.clue-slide .clue-text { flex: 1; min-width: 0; }
+
+/* ---- pencil-mode key (bottom-left of the keyboard) ---- */
+.key.pencil-key { display: grid; place-items: center; }
+.key.pencil-key.on { background: var(--accent); color: #fff; }
+.kbd.pencil .key.pencil-key { color: #fff; }
+
+/* ---- header owns the status-bar area, so nothing sits under the Dynamic Island ---- */
+#app { padding-top: 0; }
+.bar { padding-top: calc(env(safe-area-inset-top) + 6px); }
+@supports (-webkit-touch-callout: none) {
+  /* iPhone/iPad: a little extra room below the status bar's blurred edge. */
+  .bar { padding-top: calc(env(safe-area-inset-top) + 10px); }
+}
