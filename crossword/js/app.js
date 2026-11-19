@@ -814,6 +814,16 @@ async function solveView(p) {
   if (!allWords.length) return go(`#/p/${p.id}/grid`);
   const clueText = w => (p.clues[w.dir] && p.clues[w.dir][w.num]) || '';
   const wordOf = (i, d) => { const k = (d === 'across' ? num.acrossOf : num.downOf)[i]; return k < 0 ? null : num[d][k]; };
+  if (!p.pencil || p.pencil.length !== N) p.pencil = new Array(N).fill(false);
+
+  // Answers spread over several entries (e.g. 24-across + 2-down) act as one.
+  let groups = new Map();
+  const groupWords = w => (groups.get(w) ? groups.get(w).words : [w]);
+  const mainOf = w => (groups.get(w) ? groups.get(w).main : w);
+  const shortName = w => `${w.num}${w.dir === 'across' ? 'A' : 'D'}`;
+  // Order for ‹ › : skip the "See 24-across" parts, they belong to their main clue.
+  let navWords = allWords;
+  const isComplete = () => p.fill.every((v, i) => p.blocks[i] || v);
 
   let sel = allWords[0].cells[0];
   let dir = allWords[0].dir;
@@ -826,18 +836,33 @@ async function solveView(p) {
     const cell = h('div', { class: 'cell' + (p.blocks[i] ? ' block' : '') },
       num.numbers[i] ? h('span', { class: 'n' }, num.numbers[i]) : null,
       h('span', { class: 'l' }));
+    cell.letter = cell.lastChild;
     if (!p.blocks[i]) cell.addEventListener('pointerdown', e => { e.preventDefault(); tapCell(i); });
     cells.push(cell);
     grid.append(cell);
   }
   const gridWrap = h('div', { class: 'xw-wrap' }, grid);
 
+  let keyboard = null;
   // clue bar
   const clueLabel = h('div', { class: 'clue-text' });
+  const PENCIL_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/><path stroke="currentColor" stroke-width="2" d="M13.5 7.1l3.4 3.4"/></svg>';
+  const pencilBtn = h('button', {
+    class: 'icon pencil-btn', 'aria-label': 'Pencil mode', title: 'Pencil mode: enter letters in grey',
+    onpointerdown: e => { e.preventDefault(); setPencil(!p.pencilMode); },
+  });
+  pencilBtn.innerHTML = PENCIL_SVG;
+  function setPencil(on) {
+    p.pencilMode = on;
+    pencilBtn.classList.toggle('on', on);
+    pencilBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    keyboard && keyboard.classList.toggle('pencil', on);
+    saveSoon(p);
+  }
   const clueBar = h('div', { class: 'cluebar' },
     h('button', { class: 'icon', 'aria-label': 'Previous clue', onpointerdown: e => { e.preventDefault(); jumpWord(-1); } }, '‹'),
     h('div', { class: 'clue-mid', onpointerdown: e => { e.preventDefault(); toggleDir(); } }, clueLabel),
-    h('button', { class: 'icon edit', 'aria-label': 'Edit this clue', onclick: () => editClue() }, '✎'),
+    pencilBtn,
     h('button', { class: 'icon', 'aria-label': 'Next clue', onpointerdown: e => { e.preventDefault(); jumpWord(1); } }, '›'));
 
   // clue list
@@ -849,16 +874,34 @@ async function solveView(p) {
       h('h3', {}, dirLabel(d)),
       h('ol', {}, num[d].map(w => {
         const li = h('li', { onclick: () => { selectWord(w); document.body.classList.remove('list-open'); } },
-          h('b', {}, w.num), h('span', {}, clueText(w) || h('i', {}, `(${w.cells.length})`)));
+          h('b', {}, w.num), h('span', {}, P.clueBody(clueText(w)) || h('i', {}, `(${w.cells.length})`)));
         listItems.set(w, li);
         return li;
       })))));
   }
-  renderList();
+  // Word breaks / hyphens from the (lengths), drawn on the cell edges.
+  function renderMarks() {
+    grid.querySelectorAll('.mk').forEach(el => el.remove());
+    const seen = new Set();
+    for (const w of allWords) {
+      const main = mainOf(w);
+      if (seen.has(main)) continue;
+      seen.add(main);
+      for (const m of P.answerMarks(groupWords(main), P.parseEnumeration(clueText(main)))) {
+        cells[m.cell].append(h('i', { class: `mk ${m.kind}-${m.dir === 'across' ? 'a' : 'd'}`, 'aria-hidden': 'true' }));
+      }
+    }
+  }
+  function refreshClues() {
+    groups = P.linkWords(num, p.clues);
+    navWords = allWords.filter(w => mainOf(w) === w);
+    renderList();
+    renderMarks();
+  }
 
   // keyboard
   const keyRows = ['QWERTYUIOP', 'ASDFGHJKL', '⇄ZXCVBNM⌫'];
-  const keyboard = h('div', { class: 'kbd' }, keyRows.map(row => h('div', { class: 'krow' },
+  keyboard = h('div', { class: 'kbd' }, keyRows.map(row => h('div', { class: 'krow' },
     [...row].map(k => h('button', {
       class: 'key' + (k === '⌫' || k === '⇄' ? ' wide' : ''),
       'aria-label': k === '⌫' ? 'Backspace' : k === '⇄' ? 'Switch direction' : k,
@@ -867,24 +910,28 @@ async function solveView(p) {
 
   function update() {
     const w = wordOf(sel, dir);
-    const inWord = new Set(w ? w.cells : []);
+    const parts = w ? groupWords(w) : [];
+    const inWord = new Set(parts.flatMap(x => x.cells));
     for (let i = 0; i < N; i++) {
       if (p.blocks[i]) continue;
       const c = cells[i];
       c.classList.toggle('sel', i === sel);
       c.classList.toggle('word', inWord.has(i) && i !== sel);
-      c.lastChild.textContent = p.fill[i] || '';
+      c.classList.toggle('pencil', !!(p.fill[i] && p.pencil[i]));
+      c.letter.textContent = p.fill[i] || '';
     }
     if (w) {
-      const t = clueText(w);
+      const main = mainOf(w);
+      const t = P.clueBody(clueText(main));
+      const len = parts.reduce((a, x) => a + x.cells.length, 0);
       let fallback;
       if (jobs.has(p.id)) fallback = jobLabel(p.id);
-      else if (p.cluesStatus === 'failed') fallback = `Couldn't read the clues — tap ✎ (${w.cells.length} letters)`;
-      else fallback = `No clue text — ${w.cells.length} letters · tap ✎ to add`;
-      clueLabel.replaceChildren(h('b', {}, `${w.num}${dir === 'across' ? 'A' : 'D'}`), ' ', t || h('i', {}, fallback));
+      else if (p.cluesStatus === 'failed') fallback = `Couldn't read the clues — tap edit at the top (${len} letters)`;
+      else fallback = `No clue text — ${len} letters · tap edit at the top to add`;
+      clueLabel.replaceChildren(h('b', {}, parts.map(shortName).join(', ')), ' ', t || h('i', {}, fallback));
     } else clueLabel.textContent = '';
     for (const [word, li] of listItems) {
-      li.classList.toggle('current', word === w);
+      li.classList.toggle('current', parts.includes(word));
       li.classList.toggle('done', word.cells.every(i => p.fill[i]));
     }
     const cur = w && listItems.get(w);
@@ -895,11 +942,53 @@ async function solveView(p) {
   function changed() {
     saveSoon(p);
     update();
-    if (p.fill.every((v, i) => p.blocks[i] || v) && !p.completeShown) {
-      p.completeShown = true;
-      toast('🎉 Every square is filled!', 3500);
+    if (p.completedTime == null && isComplete()) {
+      stopTimer();
+      p.completedTime = p.timeMs;
+      renderTimer();
+      saveSoon(p);
+      toast(`🎉 Finished in ${fmtTime(p.completedTime)}!`, 4000);
     }
   }
+
+  // Timer: counts while the puzzle is on screen, from first opening until every square is filled.
+  p.timeMs = p.timeMs || 0;
+  let runningSince = null;
+  const timerEl = h('span', { class: 'timer', 'aria-label': 'Time' });
+  const fmtTime = ms => {
+    const t = Math.floor(ms / 1000), hh = Math.floor(t / 3600), mm = Math.floor(t / 60) % 60, ss = t % 60;
+    return (hh ? `${hh}:${String(mm).padStart(2, '0')}` : `${mm}`) + ':' + String(ss).padStart(2, '0');
+  };
+  const elapsed = () => p.timeMs + (runningSince ? Date.now() - runningSince : 0);
+  function renderTimer() {
+    timerEl.textContent = p.completedTime != null ? `✓ ${fmtTime(p.completedTime)}` : `⏱ ${fmtTime(elapsed())}`;
+    timerEl.classList.toggle('done', p.completedTime != null);
+  }
+  function startTimer() {
+    if (runningSince || p.completedTime != null || document.hidden) return;
+    runningSince = Date.now();
+  }
+  function stopTimer() {
+    if (!runningSince) return;
+    p.timeMs += Date.now() - runningSince;
+    runningSince = null;
+    saveSoon(p);
+    flushSave();
+  }
+  listen(document, 'visibilitychange', () => { if (document.hidden) stopTimer(); else startTimer(); renderTimer(); });
+  listen(window, 'pagehide', stopTimer);
+  let ticks = 0;
+  const tick = setInterval(() => {
+    // Bank the running time every few seconds so a crash or reload loses almost nothing.
+    if (runningSince && ++ticks % 5 === 0) {
+      const now = Date.now();
+      p.timeMs += now - runningSince;
+      runningSince = now;
+      saveSoon(p);
+    }
+    renderTimer();
+  }, 1000);
+  onCleanup(() => { clearInterval(tick); stopTimer(); });
 
   function tapCell(i) {
     if (i === sel) toggleDir();
@@ -914,23 +1003,31 @@ async function solveView(p) {
   }
   function selectWord(w, empty = true) {
     dir = w.dir;
-    sel = (empty && w.cells.find(i => !p.fill[i])) ?? w.cells[0];
+    sel = (empty ? w.cells.find(i => !p.fill[i]) : undefined) ?? w.cells[0];
     update();
   }
   function jumpWord(delta) {
     const w = wordOf(sel, dir);
-    const k = w ? allWords.indexOf(w) : 0;
-    selectWord(allWords[(k + delta + allWords.length) % allWords.length]);
+    const k = w ? navWords.indexOf(mainOf(w)) : 0;
+    const next = navWords[(k + delta + navWords.length) % navWords.length];
+    // Land on the first empty square anywhere in the (possibly multi-part) answer.
+    const empty = groupWords(next).flatMap(x => x.cells.map(i => [x, i])).find(([, i]) => !p.fill[i]);
+    if (empty) { dir = empty[0].dir; sel = empty[1]; update(); } else selectWord(next, false);
   }
   function type(ch) {
     p.fill[sel] = ch;
-    p.completeShown = p.completeShown && p.fill.every((v, i) => p.blocks[i] || v);
+    p.pencil[sel] = !!p.pencilMode;
     const w = wordOf(sel, dir);
     if (w) {
+      const parts = groupWords(w);
       const pos = w.cells.indexOf(sel);
+      const nextPart = parts[parts.indexOf(w) + 1];
       if (pos < w.cells.length - 1) sel = w.cells[pos + 1];
-      else if (!w.cells.every(i => p.fill[i])) sel = w.cells.find(i => !p.fill[i]);
-      else jumpWord(1);
+      else if (nextPart) { dir = nextPart.dir; sel = nextPart.cells[0]; }   // carry on into the next part
+      else {
+        const empty = parts.flatMap(x => x.cells.map(i => [x, i])).find(([, i]) => !p.fill[i]);
+        if (empty) { dir = empty[0].dir; sel = empty[1]; } else jumpWord(1);
+      }
     }
     changed();
   }
@@ -939,9 +1036,12 @@ async function solveView(p) {
     else {
       const w = wordOf(sel, dir);
       const pos = w ? w.cells.indexOf(sel) : 0;
+      const parts = w ? groupWords(w) : [];
+      const prevPart = parts[parts.indexOf(w) - 1];
       if (pos > 0) { sel = w.cells[pos - 1]; p.fill[sel] = ''; }
+      else if (prevPart) { dir = prevPart.dir; sel = prevPart.cells[prevPart.cells.length - 1]; p.fill[sel] = ''; }
     }
-    p.completeShown = false;
+    p.pencil[sel] = false;
     changed();
   }
   function move(dr, dc) {
@@ -972,12 +1072,12 @@ async function solveView(p) {
   listen(bus, 'clues', e => {
     if (e.detail.id !== p.id) return;
     if (e.detail.done) {
-      renderList();
+      refreshClues();
       if (e.detail.error) toast(`Couldn't read the clues: ${e.detail.error}`, 4500);
       else {
         const r = e.detail.report;
         const found = r.across.found + r.down.found, total = r.across.total + r.down.total;
-        toast(found === total ? `Clues loaded (${total}). Tap ✎ to fix any typos.` : `Read ${found} of ${total} clues. Tap ✎ to add the rest.`, 4500);
+        toast(found === total ? `Clues loaded (${total}). Tap the edit button at the top to fix any typos.` : `Read ${found} of ${total} clues. Tap the edit button at the top to add the rest.`, 4500);
       }
     }
     update();
@@ -996,20 +1096,23 @@ async function solveView(p) {
 
   // Edit the current clue, with the photo for reference.
   function editClue() {
-    const w = wordOf(sel, dir);
-    if (!w) return;
+    const cur = wordOf(sel, dir);
+    if (!cur) return;
+    const w = mainOf(cur);
+    const parts = groupWords(w);
     const input = h('textarea', { class: 'clue-input', rows: 3, spellcheck: 'true' });
     input.value = clueText(w);
     const save = () => {
       p.cluesText[w.dir] = P.setClueLine(p.cluesText[w.dir], w.num, input.value);
       p.clues = P.cluesFromText(p.cluesText);
       saveSoon(p);
-      renderList();
+      refreshClues();
       update();
       s.close();
     };
     const photos = [p.image, p.clueImage].filter(Boolean);
-    const s = sheet(`${w.num} ${dirLabel(w.dir)} · ${w.cells.length} letters`, h('div', { class: 'edit-clue' },
+    const totalLen = parts.reduce((a, x) => a + x.cells.length, 0);
+    const s = sheet(`${parts.map(x => `${x.num} ${dirLabel(x.dir)}`).join(' + ')} · ${totalLen} letters`, h('div', { class: 'edit-clue' },
       photos.length ? photoPane(photos, { className: 'in-sheet', side: clueSide(p) }) : null,
       h('div', { class: 'pad' },
         input,
@@ -1065,8 +1168,11 @@ async function solveView(p) {
         s.close();
       } }, '🏷  Rename'),
       h('button', { onclick: () => {
-        if (!confirm('Clear all your answers?')) return;
-        resetFill(p); p.completeShown = false; changed(); s.close();
+        if (!confirm('Clear all your answers and reset the timer?')) return;
+        stopTimer();
+        resetFill(p); p.pencil = new Array(N).fill(false);
+        p.timeMs = 0; p.completedTime = null;
+        startTimer(); renderTimer(); changed(); s.close();
       } }, '🧹  Clear answers'),
       h('button', { class: 'danger', onclick: async () => {
         if (!confirm('Delete this puzzle?')) return;
@@ -1077,20 +1183,35 @@ async function solveView(p) {
       } }, '🗑  Delete puzzle')));
   }
 
+  // "Edit clue" icon: a page with a pen, so it isn't confused with the pencil-mode toggle.
+  const editBtn = h('button', { class: 'icon', 'aria-label': 'Edit this clue', title: 'Edit this clue', onclick: () => editClue() });
+  editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6"/><path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L12 14.6 8 15.6l1-4z"/></svg>';
   const bar = header(p.title, {
     back: '#/',
     actions: [
+      editBtn,
       p.image ? h('button', { class: 'icon', 'aria-label': 'Show photo', onclick: showPhoto }, '🖼') : null,
       h('button', { class: 'icon list-btn', 'aria-label': 'Clue list', onclick: () => document.body.classList.toggle('list-open') }, '☰'),
       h('button', { class: 'icon', 'aria-label': 'Menu', onclick: menu }, '⋯'),
     ],
   });
-  const titleEl = bar.querySelector('h1');
+  const h1 = bar.querySelector('h1');
+  const titleEl = h('span', { class: 't' }, p.title);
+  h1.replaceChildren(titleEl, timerEl);
+  h1.classList.add('with-timer');
+  document.body.classList.add('solving');
+  onCleanup(() => document.body.classList.remove('solving'));
 
   app.replaceChildren(h('div', { class: 'solve' },
     bar,
     h('div', { class: 'solve-main' }, gridWrap, clueList),
     clueBar, keyboard));
+  refreshClues();
+  setPencil(!!p.pencilMode);
+  // Older puzzles finished before the timer existed.
+  if (p.completedTime == null && isComplete()) p.completedTime = p.timeMs;
+  startTimer();
+  renderTimer();
   update();
 }
 
