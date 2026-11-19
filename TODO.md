@@ -24,9 +24,9 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [ ] **Setter's note** – show a note or instruction from the setter for the crossword. *(Details to be agreed
   first: where the note comes from and where it's shown.)*
 - [x] **Tidy the top bar** – move the *Edit clue* and *Show photo* buttons into the ⋯ menu.
-- [x] **Header still slightly blurred on iPhone** (home-screen app, see screenshot from 19 Nov): the iPhone
-  blurs the top strip of the screen, and the header still sat inside it. The app no longer draws under the
-  status bar at all (removed `viewport-fit=cover`). *(Needs checking on a real iPhone.)*
+- [ ] **Header still slightly blurred on iPhone** (home-screen app, see screenshot from 19 Nov): the iPhone
+  blurs the top strip of the screen, and the header still sits inside it. Tried removing `viewport-fit=cover`
+  (20 Nov): that moved the keyboard down the screen, so it was undone. Needs another approach.
 - [ ] **External references menu** – a second menu next to ⋯ with look-ups, e.g. search a word on Power
   Thesaurus or Wikipedia, search the clue online. *(Needs working out first.)*
 
