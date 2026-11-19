@@ -264,3 +264,19 @@ export function answerMarks(words, enumeration) {
   });
   return marks;
 }
+
+// ---- References to other entries inside clue text ----
+
+// Finds mentions like "24-down", "9 Down", "27-across" that match an entry in the grid.
+// Returns [{ start, end, word }] in order.
+export function findRefs(text, num) {
+  const out = [];
+  const re = /\b(\d{1,3})\s*-?\s*(across|down)\b/gi;
+  let m;
+  while ((m = re.exec(String(text || '')))) {
+    const d = m[2].toLowerCase();
+    const word = num[d].find(w => w.num === +m[1]);
+    if (word) out.push({ start: m.index, end: m.index + m[0].length, word });
+  }
+  return out;
+}
