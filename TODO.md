@@ -33,6 +33,10 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   there, without going back to the menu.
 - [ ] **Stay on the last square** – after typing the final letter of an answer, keep the cursor on that square
   instead of jumping to the next clue. (Multi-part answers still carry on into their next part.)
+- [ ] **Show referenced answers in clues** – when a clue mentions another entry (e.g. "Dispute cited beer?
+  That's 24-down"), show that entry's answer once it's filled in, in capitals: either replacing the reference
+  ("That's CASSAVA") or after it in square brackets ("That's 24-down [CASSAVA]"). Plan: the bracket version,
+  so the original wording stays visible.
 
 ## Notes on how these work
 
