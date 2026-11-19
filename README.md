@@ -16,10 +16,12 @@ normal app and works offline (except clue scanning the first time, which downloa
    layout is analysed first, so multi-column clue lists are read column by column, Across/Down headings are
    followed, and the grid is used to repair misread clue numbers and fill in missing (lengths).
 3. **Solve** – tap a square (tap again to switch Across/Down), type with the built-in keyboard, tap the clue bar
-   to switch direction, ‹ › to move between clues, ☰ for the clue list, 🖼 to view the original photo.
-4. **Fix mistakes if you spot one** – ✎ on the clue bar edits that clue with the photo beside it; ⋯ → *Edit clues*
-   shows all clues under the zoomable photo; ⋯ → *Fix grid* lets you move the grid corners and toggle squares
-   over the photo. ⋯ also has the anagram helper, re-reading the clues, renaming and clearing.
+   to switch direction, swipe it left/right for the next/previous clue, ☰ for the clue list. The keyboard's
+   bottom-left key toggles pencil mode (grey letters for guesses). A timer runs under the title.
+4. **Fix mistakes if you spot one** – ⋯ → *Edit this clue* edits that clue with the photo beside it;
+   ⋯ → *Edit clues* shows all clues under the zoomable photo; ⋯ → *Fix grid* lets you move the grid corners and
+   toggle squares over the photo. ⋯ also has *Show photo*, the anagram helper, re-reading the clues, renaming
+   and clearing.
 
 Puzzles and progress are stored on the device (IndexedDB); nothing is uploaded.
 

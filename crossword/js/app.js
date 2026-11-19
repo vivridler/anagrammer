@@ -950,8 +950,8 @@ async function solveView(p) {
       const len = parts.reduce((a, x) => a + x.cells.length, 0);
       let fallback;
       if (jobs.has(p.id)) fallback = jobLabel(p.id);
-      else if (p.cluesStatus === 'failed') fallback = `Couldn't read the clues — tap edit at the top (${len} letters)`;
-      else fallback = `No clue text — ${len} letters · tap edit at the top to add`;
+      else if (p.cluesStatus === 'failed') fallback = `Couldn't read the clues — use ⋯ → Edit clue (${len} letters)`;
+      else fallback = `No clue text — ${len} letters · ⋯ → Edit clue to add`;
       clueNum.replaceChildren(...parts.map(x => h('span', {}, shortName(x))));
       clueLabel.replaceChildren(t || h('i', {}, fallback));
     } else { clueNum.textContent = ''; clueLabel.textContent = ''; }
@@ -1112,7 +1112,7 @@ async function solveView(p) {
       else {
         const r = e.detail.report;
         const found = r.across.found + r.down.found, total = r.across.total + r.down.total;
-        toast(found === total ? `Clues loaded (${total}). Tap the edit button at the top to fix any typos.` : `Read ${found} of ${total} clues. Tap the edit button at the top to add the rest.`, 4500);
+        toast(found === total ? `Clues loaded (${total}). Spot a typo? ⋯ → Edit clue.` : `Read ${found} of ${total} clues. Add the rest with ⋯ → Edit clue.`, 4500);
       }
     }
     update();
@@ -1190,6 +1190,8 @@ async function solveView(p) {
 
   function menu() {
     const s = sheet('Puzzle', h('div', { class: 'menu' },
+      h('button', { onclick: () => { s.close(); editClue(); } }, '✎  Edit this clue'),
+      p.image ? h('button', { onclick: () => { s.close(); showPhoto(); } }, '🖼  Show photo') : null,
       h('button', { onclick: () => { s.close(); anagram(); } }, '🔀  Anagram helper'),
       h('button', { onclick: () => go(`#/p/${p.id}/clues`) }, '✏️  Edit clues'),
       h('button', { onclick: () => go(`#/p/${p.id}/${p.image ? 'corners' : 'grid'}`) }, '▦  Fix grid'),
@@ -1218,14 +1220,9 @@ async function solveView(p) {
       } }, '🗑  Delete puzzle')));
   }
 
-  // "Edit clue" icon: a page with a pen, so it isn't confused with the pencil-mode toggle.
-  const editBtn = h('button', { class: 'icon', 'aria-label': 'Edit this clue', title: 'Edit this clue', onclick: () => editClue() });
-  editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6"/><path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L12 14.6 8 15.6l1-4z"/></svg>';
   const bar = header(p.title, {
     back: '#/',
     actions: [
-      editBtn,
-      p.image ? h('button', { class: 'icon', 'aria-label': 'Show photo', onclick: showPhoto }, '🖼') : null,
       h('button', { class: 'icon list-btn', 'aria-label': 'Clue list', onclick: () => document.body.classList.toggle('list-open') }, '☰'),
       h('button', { class: 'icon', 'aria-label': 'Menu', onclick: menu }, '⋯'),
     ],
