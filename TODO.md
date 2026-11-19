@@ -12,3 +12,4 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   "See 24-across" entries go to the full clue.
 - [ ] **Word breaks in the grid** – use the lengths in brackets to mark where words end in multi-word answers:
   a thicker divider for word breaks, e.g. (5,2), and a hyphen mark for hyphens, e.g. (5-4,6).
+- [ ] **Timer** – time how long the puzzle is open, from starting to solve until the crossword is finished.
