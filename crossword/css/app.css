@@ -302,3 +302,34 @@ body.list-open .cluelist { display: block; }
 }
 .toolbar.flat { background: transparent; border: 0; padding: 8px 0 0; flex-wrap: wrap; }
 .cluebar .icon.edit { font-size: 22px; min-width: 40px; padding: 6px 4px; }
+
+/* ---- clue bar: tighter buttons so the clue has room ---- */
+.cluebar .icon { min-width: 30px; padding: 4px 2px; font-size: 26px; }
+.clue-mid { padding: 4px 2px; }
+.cluebar .pencil-btn {
+  min-width: 36px; margin: 8px 2px; padding: 0 6px; border-radius: 8px;
+  display: grid; place-items: center; color: var(--text);
+}
+.cluebar .pencil-btn.on { background: var(--accent); color: #fff; }
+.kbd.pencil .key { color: #8a94a6; }
+
+/* ---- pencil (tentative) letters ---- */
+.cell.pencil .l { color: #8a94a6; font-weight: 400; font-style: italic; }
+
+/* ---- word breaks and hyphens from the clue's (lengths) ---- */
+.mk { position: absolute; pointer-events: none; z-index: 2; background: var(--block); }
+.mk.break-a { top: 0; bottom: 0; right: -2px; width: 3px; }
+.mk.break-d { left: 0; right: 0; bottom: -2px; height: 3px; }
+.mk.hyphen-a { top: 50%; right: -4px; width: 8px; height: 2px; margin-top: -1px; }
+.mk.hyphen-d { left: 50%; bottom: -4px; height: 8px; width: 2px; margin-left: -1px; }
+
+/* ---- timer under the title ---- */
+.bar h1.with-timer { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.bar h1.with-timer .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timer { font-size: 12px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.timer.done { color: var(--ok); }
+.bar .actions .icon { min-width: 38px; padding: 6px 6px; }
+
+/* ---- keyboard colour runs to the bottom edge (home-bar area) ---- */
+body.solving #app { padding-bottom: 0; }
+body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }

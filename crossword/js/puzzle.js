@@ -34,7 +34,7 @@ export function numberGrid(rows, cols, blocks) {
 // A header is the word alone, or followed by ":" or straight away by a clue number.
 const HEADER = /^\s*(across|down)\s*(?:[:.\-]\s*)?(?=$|\d)(.*)$/i;
 // "12 Clue", "12. Clue", and linked clues such as "24,2-down Clue" or "1, 5 Clue".
-const CLUE = /^\s*(\d{1,3})((?:\s*,\s*\d{1,3}(?:\s*-?\s*(?:across|down|ac|dn|a|d)\b)?|\s*,?\s+\d{1,3}\s*-\s*(?:across|down)\b)*)(?:\s*[.:)]\s*|\s+)(\S.*)$/i;
+const CLUE = /^\s*(\d{1,3})((?:\s*,\s*\d{1,3}(?:\s*-?\s*(?:across|down|ac|dn|a|d)\b)?|\s*\.\s*\d{1,3}\s*-?\s*(?:across|down)\b|\s*,?\s+\d{1,3}\s*-\s*(?:across|down)\b)*)(?:\s*[.:)]\s*|\s+)(\S.*)$/i;
 const ENUM_END = /\(\s*\d[\d\s,.\-]*\)\s*$/;
 
 // Fix the commonest OCR confusions in a leading clue number ("l2" -> "12", "1O" -> "10").
@@ -83,7 +83,7 @@ export function parseClueText(text, defaultSection = 'across', useHeaders = true
       // No headings at all: a restart of the numbering means the Down list began.
       if (useHeaders && !hasHeaders && section === 'across' && n < prevNum) section = 'down';
       prevNum = n;
-      const links = m[2].replace(/^\s*,?\s*/, '').replace(/\s*,\s*/g, ', ').replace(/\s*-?\s*(across|down|ac|dn|a|d)\b/gi,
+      const links = m[2].replace(/^\s*[,.]?\s*/, '').replace(/\s*[,.]\s*/g, ', ').replace(/\s*-?\s*(across|down|ac|dn|a|d)\b/gi,
         (x, d) => '-' + (/^a/i.test(d) ? 'across' : 'down'));
       current = [n, (links ? `(with ${links}) ` : '') + m[3].trim()];
       out[section].push(current);
@@ -190,4 +190,77 @@ export function setClueLine(text, n, clue) {
     entries.splice(at < 0 ? entries.length : at, 0, { n, lines: [line] });
   }
   return entries.map(e => e.lines.join('\n')).join('\n');
+}
+
+// ---- Linked answers and word breaks ----
+
+// "(5-4,6)" at the end of a clue -> { lengths: [5,4,6], seps: ['-', ','] }, or null.
+export function parseEnumeration(text) {
+  const m = String(text || '').match(/\(\s*(\d+(?:\s*[,\-\s]\s*\d+)*)\s*\)\s*$/);
+  if (!m) return null;
+  const parts = m[1].split(/\s*([,\-]|\s)\s*/);
+  const lengths = [], seps = [];
+  parts.forEach((t, k) => { if (k % 2) seps.push(t.trim() === '-' ? '-' : ','); else lengths.push(+t); });
+  return { lengths, seps };
+}
+
+// Strip the "(with 2-down) " prefix we store on linked clues.
+export const clueBody = t => String(t || '').replace(/^\(with [^)]*\)\s*/i, '');
+
+// Groups of entries that form one answer, e.g. 24-across "(with 2-down) …" and
+// 2-down "See 24-across". Returns Map(word -> { words: [main, ...rest], main }).
+export function linkWords(num, clues) {
+  const byKey = new Map();
+  for (const d of ['across', 'down']) for (const w of num[d]) byKey.set(`${d}:${w.num}`, w);
+  const find = (n, d, prefer) => (d ? byKey.get(`${d}:${n}`)
+    : byKey.get(`${prefer}:${n}`) || byKey.get(`${prefer === 'across' ? 'down' : 'across'}:${n}`));
+  const refDir = s => (!s ? null : /^a/i.test(s) ? 'across' : 'down');
+  const groupOf = new Map();
+  const text = w => (clues[w.dir] && clues[w.dir][w.num]) || '';
+
+  // 1. Main clues that name their other parts: "(with 2-down) …".
+  for (const d of ['across', 'down']) for (const w of num[d]) {
+    const m = text(w).match(/^\(with ([^)]*)\)/i);
+    if (!m) continue;
+    const words = [w];
+    for (const ref of m[1].split(',')) {
+      const r = ref.trim().match(/^(\d{1,3})\s*-?\s*(across|down|a|d)?$/i);
+      const other = r && find(+r[1], refDir(r[2]), w.dir);
+      if (other && !words.includes(other) && !groupOf.has(other)) words.push(other);
+    }
+    if (words.length > 1 && !groupOf.has(w)) {
+      const g = { words, main: w };
+      words.forEach(x => groupOf.set(x, g));
+    }
+  }
+  // 2. "See 24-across" entries without a matching main clue above.
+  for (const d of ['across', 'down']) for (const w of num[d]) {
+    if (groupOf.has(w)) continue;
+    const m = text(w).match(/^see\s+(\d{1,3})\s*-?\s*(across|down|a|d)?\b/i);
+    if (!m) continue;
+    const main = find(+m[1], refDir(m[2]), w.dir === 'across' ? 'down' : 'across');
+    if (!main || main === w) continue;
+    const g = groupOf.get(main) || { words: [main], main };
+    g.words.push(w);
+    g.words.forEach(x => groupOf.set(x, g));
+  }
+  return groupOf;
+}
+
+// Where to draw word breaks and hyphens for an answer spread over `words`.
+// Returns [{ cell, dir, kind: 'break' | 'hyphen' }]: the mark goes after `cell`
+// (on its right edge for across, bottom edge for down).
+export function answerMarks(words, enumeration) {
+  if (!enumeration) return [];
+  const seq = words.flatMap(w => w.cells.map((cell, k) => ({ cell, dir: w.dir, last: k === w.cells.length - 1 })));
+  const total = enumeration.lengths.reduce((a, b) => a + b, 0);
+  if (total !== seq.length) return []; // lengths don't fit the grid: probably misread, so draw nothing
+  const marks = [];
+  let pos = 0;
+  enumeration.lengths.slice(0, -1).forEach((len, k) => {
+    pos += len;
+    const at = seq[pos - 1];
+    if (!at.last) marks.push({ cell: at.cell, dir: at.dir, kind: enumeration.seps[k] === '-' ? 'hyphen' : 'break' });
+  });
+  return marks;
 }
