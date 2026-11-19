@@ -847,23 +847,47 @@ async function solveView(p) {
   // clue bar
   const clueLabel = h('div', { class: 'clue-text' });
   const PENCIL_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/><path stroke="currentColor" stroke-width="2" d="M13.5 7.1l3.4 3.4"/></svg>';
-  const pencilBtn = h('button', {
-    class: 'icon pencil-btn', 'aria-label': 'Pencil mode', title: 'Pencil mode: enter letters in grey',
+  // Pencil mode lives on the keyboard's bottom-left key.
+  const pencilKey = h('button', {
+    class: 'key wide pencil-key', 'aria-label': 'Pencil mode', title: 'Pencil mode: enter letters in grey',
     onpointerdown: e => { e.preventDefault(); setPencil(!p.pencilMode); },
   });
-  pencilBtn.innerHTML = PENCIL_SVG;
+  pencilKey.innerHTML = PENCIL_SVG;
   function setPencil(on) {
     p.pencilMode = on;
-    pencilBtn.classList.toggle('on', on);
-    pencilBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    pencilKey.classList.toggle('on', on);
+    pencilKey.setAttribute('aria-pressed', on ? 'true' : 'false');
     keyboard && keyboard.classList.toggle('pencil', on);
     saveSoon(p);
   }
-  const clueBar = h('div', { class: 'cluebar' },
-    h('button', { class: 'icon', 'aria-label': 'Previous clue', onpointerdown: e => { e.preventDefault(); jumpWord(-1); } }, '‹'),
-    h('div', { class: 'clue-mid', onpointerdown: e => { e.preventDefault(); toggleDir(); } }, clueLabel),
-    pencilBtn,
-    h('button', { class: 'icon', 'aria-label': 'Next clue', onpointerdown: e => { e.preventDefault(); jumpWord(1); } }, '›'));
+  // Clue bar: swipe left/right for the next/previous clue, tap to switch Across/Down.
+  const clueNum = h('div', { class: 'clue-num' });
+  const clueSlide = h('div', { class: 'clue-slide' }, clueNum, clueLabel);
+  const clueBar = h('div', { class: 'cluebar', role: 'button', 'aria-label': 'Clue: swipe for next or previous, tap to switch direction' }, clueSlide);
+  let swipe = null;
+  clueBar.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    swipe = { x: e.clientX, y: e.clientY, id: e.pointerId, dx: 0 };
+    clueBar.setPointerCapture(e.pointerId);
+    clueSlide.style.transition = 'none';
+  });
+  clueBar.addEventListener('pointermove', e => {
+    if (!swipe || e.pointerId !== swipe.id) return;
+    swipe.dx = e.clientX - swipe.x;
+    if (Math.abs(swipe.dx) > 6) clueSlide.style.transform = `translateX(${swipe.dx * 0.6}px)`;
+  });
+  const endSwipe = cancelled => e => {
+    if (!swipe || e.pointerId !== swipe.id) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    swipe = null;
+    clueSlide.style.transition = 'transform .18s ease-out';
+    clueSlide.style.transform = '';
+    if (cancelled) return;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) jumpWord(dx < 0 ? 1 : -1);
+    else if (Math.abs(dx) < 10 && Math.abs(dy) < 10) toggleDir();
+  };
+  clueBar.addEventListener('pointerup', endSwipe(false));
+  clueBar.addEventListener('pointercancel', endSwipe(true));
 
   // clue list
   const listItems = new Map();
@@ -900,12 +924,12 @@ async function solveView(p) {
   }
 
   // keyboard
-  const keyRows = ['QWERTYUIOP', 'ASDFGHJKL', '⇄ZXCVBNM⌫'];
+  const keyRows = ['QWERTYUIOP', 'ASDFGHJKL', '✏ZXCVBNM⌫'];
   keyboard = h('div', { class: 'kbd' }, keyRows.map(row => h('div', { class: 'krow' },
-    [...row].map(k => h('button', {
-      class: 'key' + (k === '⌫' || k === '⇄' ? ' wide' : ''),
-      'aria-label': k === '⌫' ? 'Backspace' : k === '⇄' ? 'Switch direction' : k,
-      onpointerdown: e => { e.preventDefault(); k === '⌫' ? backspace() : k === '⇄' ? toggleDir() : type(k); },
+    [...row].map(k => k === '✏' ? pencilKey : h('button', {
+      class: 'key' + (k === '⌫' ? ' wide' : ''),
+      'aria-label': k === '⌫' ? 'Backspace' : k,
+      onpointerdown: e => { e.preventDefault(); k === '⌫' ? backspace() : type(k); },
     }, k)))));
 
   function update() {
@@ -928,8 +952,9 @@ async function solveView(p) {
       if (jobs.has(p.id)) fallback = jobLabel(p.id);
       else if (p.cluesStatus === 'failed') fallback = `Couldn't read the clues — tap edit at the top (${len} letters)`;
       else fallback = `No clue text — ${len} letters · tap edit at the top to add`;
-      clueLabel.replaceChildren(h('b', {}, parts.map(shortName).join(', ')), ' ', t || h('i', {}, fallback));
-    } else clueLabel.textContent = '';
+      clueNum.replaceChildren(...parts.map(x => h('span', {}, shortName(x))));
+      clueLabel.replaceChildren(t || h('i', {}, fallback));
+    } else { clueNum.textContent = ''; clueLabel.textContent = ''; }
     for (const [word, li] of listItems) {
       li.classList.toggle('current', parts.includes(word));
       li.classList.toggle('done', word.cells.every(i => p.fill[i]));
@@ -1006,13 +1031,23 @@ async function solveView(p) {
     sel = (empty ? w.cells.find(i => !p.fill[i]) : undefined) ?? w.cells[0];
     update();
   }
+  // An answer is finished when every square has an inked (non-pencil) letter.
+  const answerCells = w => groupWords(w).flatMap(x => x.cells.map(i => [x, i]));
+  const isFinished = w => answerCells(w).every(([, i]) => p.fill[i] && !p.pencil[i]);
   function jumpWord(delta) {
     const w = wordOf(sel, dir);
     const k = w ? navWords.indexOf(mainOf(w)) : 0;
-    const next = navWords[(k + delta + navWords.length) % navWords.length];
-    // Land on the first empty square anywhere in the (possibly multi-part) answer.
-    const empty = groupWords(next).flatMap(x => x.cells.map(i => [x, i])).find(([, i]) => !p.fill[i]);
-    if (empty) { dir = empty[0].dir; sel = empty[1]; update(); } else selectWord(next, false);
+    const L = navWords.length;
+    // Skip answers that are already finished (unless everything is).
+    let next = navWords[(k + delta + L) % L];
+    for (let step = 1; step <= L; step++) {
+      const cand = navWords[(((k + delta * step) % L) + L) % L];
+      if (!isFinished(cand)) { next = cand; break; }
+    }
+    // Land on the first empty square, else the first pencilled one, else the start.
+    const cellsOf = answerCells(next);
+    const target = cellsOf.find(([, i]) => !p.fill[i]) || cellsOf.find(([, i]) => p.pencil[i]);
+    if (target) { dir = target[0].dir; sel = target[1]; update(); } else selectWord(next, false);
   }
   function type(ch) {
     p.fill[sel] = ch;
