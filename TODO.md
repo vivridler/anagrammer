@@ -29,6 +29,10 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   (20 Nov): that moved the keyboard down the screen, so it was undone. Needs another approach.
 - [ ] **External references menu** – a second menu next to ⋯ with look-ups, e.g. search a word on Power
   Thesaurus or Wikipedia, search the clue online. *(Needs working out first.)*
+- [ ] **Edit the clue from the photo screen** – when viewing the photo, be able to edit the current clue right
+  there, without going back to the menu.
+- [ ] **Stay on the last square** – after typing the final letter of an answer, keep the cursor on that square
+  instead of jumping to the next clue. (Multi-part answers still carry on into their next part.)
 
 ## Notes on how these work
 
