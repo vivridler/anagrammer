@@ -37,6 +37,10 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   That's 24-down"), show that entry's answer once it's filled in, in capitals: either replacing the reference
   ("That's CASSAVA") or after it in square brackets ("That's 24-down [CASSAVA]"). Plan: the bracket version,
   so the original wording stays visible.
+- [ ] **Tap a reference to jump to it** – in clues that mention another entry (e.g. "That's 24-down"), tapping
+  the reference moves to that clue.
+- [ ] *(Maybe)* **Show which clues depend on this one** – e.g. 24-down shows "Mentioned in 10A, 12A", so you can
+  see which clues use its answer.
 
 ## Notes on how these work
 
