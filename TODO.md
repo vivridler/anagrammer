@@ -51,6 +51,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] **Back up & restore** – ⋯ on the puzzles screen saves all puzzles to a file and restores them. On iPhone,
   Safari and the home-screen app keep separate storage (and deleting the home-screen icon deletes its puzzles),
   so this is how to move puzzles between them. Restoring only adds or updates, never deletes.
+- [x] **First clue shown in full** on the puzzles screen (wraps instead of being cut off).
+- [x] **Name written as 🅂🅀🅄🄰🅁🄴🅂** (app title, home-screen name and puzzles-screen header).
 
 ## Notes on how these work
 

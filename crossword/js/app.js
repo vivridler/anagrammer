@@ -495,7 +495,7 @@ async function homeView() {
   render();
 
   app.replaceChildren(
-    header('Squares', { actions: [h('button', { class: 'icon', 'aria-label': 'Back up and restore', onclick: backupMenu }, '⋯')] }),
+    header('🅂🅀🅄🄰🅁🄴🅂', { actions: [h('button', { class: 'icon', 'aria-label': 'Back up and restore', onclick: backupMenu }, '⋯')] }),
     h('main', { class: 'scroll pad home' },
       all.length ? chips : null,
       all.length ? listEl : h('div', { class: 'empty' },
@@ -503,6 +503,7 @@ async function homeView() {
         h('p', {}, 'Snap a photo of a crossword from a newspaper, magazine or screen, and solve it here.'),
         h('p', { class: 'hint-add' }, 'Tap + to add your first crossword.'))),
     h('button', { class: 'fab', 'aria-label': 'Add a crossword', onclick: addMenu }, '+'));
+  app.querySelector('.bar h1').setAttribute('aria-label', 'Squares'); // read as a word, not letter by letter
 }
 
 // ---------- fix grid: corners ----------
