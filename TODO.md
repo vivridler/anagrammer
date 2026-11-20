@@ -52,7 +52,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   Safari and the home-screen app keep separate storage (and deleting the home-screen icon deletes its puzzles),
   so this is how to move puzzles between them. Restoring only adds or updates, never deletes.
 - [x] **First clue shown in full** on the puzzles screen (wraps instead of being cut off).
-- [x] **Name written as 🅂🅀🅄🄰🅁🄴🅂** (app title, home-screen name and puzzles-screen header).
+- [x] **Header word** – the puzzles screen's header shows a random synonym of "cross" (ANGRY, TRAVERSE, ROOD…) in
+  boxed letters like 🅂🅀🅄🄰🅁🄴🅂, different each time the screen loads. The app's name stays Squares.
 
 ## Notes on how these work
 

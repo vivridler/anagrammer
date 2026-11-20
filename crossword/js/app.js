@@ -380,6 +380,22 @@ async function createBlank() {
 
 const SORTS = { date: 'Date', source: 'Source', setter: 'Setter', number: 'Number' };
 
+// Header: a random synonym of "cross", in boxed letters (🄰–🅉), different each time the screen loads.
+const CROSS_WORDS = [
+  'ANGRY', 'IRATE', 'VEXED', 'IRKED', 'TESTY', 'TETCHY', 'CRABBY', 'GRUMPY', 'CRANKY', 'PEEVED', 'MIFFED',
+  'NARKED', 'SHIRTY', 'STROPPY', 'RATTY', 'HUFFY', 'SNAPPY', 'ANNOYED', 'PETULANT', 'IRRITABLE',
+  'TRAVERSE', 'SPAN', 'BRIDGE', 'FORD', 'INTERSECT', 'HYBRID', 'MONGREL', 'BLEND', 'THWART', 'OPPOSE', 'FOIL',
+  'CRUCIFIX', 'ROOD', 'BURDEN', 'TRIAL', 'TRAVAIL',
+];
+const boxed = word => [...word].map(ch => String.fromCodePoint(0x1F130 + ch.charCodeAt(0) - 65)).join('');
+function crossWord() {
+  const last = store.get('squares.lastHeader', '');
+  const options = CROSS_WORDS.filter(w => w !== last);
+  const word = options[Math.floor(Math.random() * options.length)];
+  store.set('squares.lastHeader', word);
+  return word;
+}
+
 function sortPuzzles(list, key, dir) {
   const byDate = (a, b) => metaOf(b).date.localeCompare(metaOf(a).date) || (b.created || 0) - (a.created || 0);
   const cmp = {
@@ -464,6 +480,7 @@ function backupMenu() {
 }
 
 async function homeView() {
+  const headerWord = crossWord();
   const all = (await DB.listPuzzles()).map(p => cache.get(p.id) || p);
   let key = store.get('squares.sort', 'date');
   if (!SORTS[key]) key = 'date';
@@ -495,7 +512,7 @@ async function homeView() {
   render();
 
   app.replaceChildren(
-    header('🅂🅀🅄🄰🅁🄴🅂', { actions: [h('button', { class: 'icon', 'aria-label': 'Back up and restore', onclick: backupMenu }, '⋯')] }),
+    header(boxed(headerWord), { actions: [h('button', { class: 'icon', 'aria-label': 'Back up and restore', onclick: backupMenu }, '⋯')] }),
     h('main', { class: 'scroll pad home' },
       all.length ? chips : null,
       all.length ? listEl : h('div', { class: 'empty' },
@@ -503,7 +520,7 @@ async function homeView() {
         h('p', {}, 'Snap a photo of a crossword from a newspaper, magazine or screen, and solve it here.'),
         h('p', { class: 'hint-add' }, 'Tap + to add your first crossword.'))),
     h('button', { class: 'fab', 'aria-label': 'Add a crossword', onclick: addMenu }, '+'));
-  app.querySelector('.bar h1').setAttribute('aria-label', 'Squares'); // read as a word, not letter by letter
+  app.querySelector('.bar h1').setAttribute('aria-label', headerWord.toLowerCase()); // read as a word, not letter by letter
 }
 
 // ---------- fix grid: corners ----------

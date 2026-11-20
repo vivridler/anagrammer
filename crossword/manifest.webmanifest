@@ -1,6 +1,6 @@
 {
-  "name": "🅂🅀🅄🄰🅁🄴🅂",
-  "short_name": "🅂🅀🅄🄰🅁🄴🅂",
+  "name": "Squares",
+  "short_name": "Squares",
   "description": "Photograph a crossword and solve it on your phone.",
   "start_url": "./",
   "scope": "./",
