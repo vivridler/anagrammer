@@ -56,6 +56,13 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   boxed letters like 🅂🅀🅄🄰🅁🄴🅂, different each time the screen loads. The app's name stays Squares.
 - [ ] **Status-bar area above the header still grey on iPhone** – tried making the page's outer background white
   (20 Nov); needs checking on the phone and another approach if it's still grey.
+- [x] **Import from the Guardian** – + → *Guardian cryptic* lists recent cryptics (Guardian Content API); tapping one
+  imports grid, clues, linked answers, setter, number and date exactly. Already-imported ones open instead.
+  *(Built and tested against Guardian-format data only: the Guardian's hosts are blocked in Claude's sandbox,
+  so the live API needs checking on the phone.)*
+- [x] **Check answers** (puzzles with solutions, i.e. Guardian imports) – ⋯ → *Check this answer* / *Check all
+  answers*: wrong letters turn red until changed. The timer stops only when everything is right.
+- [ ] *(Later)* More web sources.
 
 ## Notes on how these work
 

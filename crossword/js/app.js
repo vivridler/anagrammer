@@ -3,6 +3,7 @@ import * as P from './puzzle.js';
 import * as DB from './store.js';
 import { analyzeGrid, findCorners, readClueText, cluesFromOcr, scaledCanvas } from './importer.js';
 import { makeBackup, restoreBackup, saveFile } from './backup.js';
+import * as Guardian from './guardian.js';
 
 const app = document.getElementById('app');
 
@@ -436,7 +437,57 @@ function addMenu() {
   const s = sheet('New crossword', h('div', { class: 'menu' },
     h('button', { class: 'primary', onclick: async () => { s.close(); createFromImage(await filePicker({ capture: true })); } }, '📷  Take a photo'),
     h('button', { onclick: async () => { s.close(); createFromImage(await filePicker()); } }, '🖼  Choose an image'),
+    h('button', { onclick: () => { s.close(); guardianList(); } }, '📰  Guardian cryptic'),
     h('button', { onclick: () => { s.close(); createBlank(); } }, '▦  Blank grid')));
+}
+
+// Recent Guardian cryptics to import.
+async function guardianList() {
+  const listEl = h('div', { class: 'glist' }, h('p', { class: 'hint' }, 'Loading recent cryptics…'));
+  const s = sheet('Guardian cryptic', h('div', { class: 'gwrap' },
+    listEl,
+    h('div', { class: 'toolbar flat pad' },
+      h('button', { class: 'small', onclick: () => {
+        const k = prompt('Guardian API key (leave empty to use the shared "test" key). Get a free one at open-platform.theguardian.com.', Guardian.apiKey() === 'test' ? '' : Guardian.apiKey());
+        if (k !== null) { Guardian.setApiKey(k.trim()); s.close(); guardianList(); }
+      } }, '⚙︎ API key'))), { tall: true });
+  try {
+    const [items, mine] = await Promise.all([Guardian.recentPuzzles('cryptic'), DB.listPuzzles()]);
+    const have = new Map(mine.filter(x => x.sourceId).map(x => [x.sourceId, x]));
+    if (!items.length) { listEl.replaceChildren(h('p', { class: 'hint' }, 'No puzzles found.')); return; }
+    listEl.replaceChildren(h('ul', { class: 'library' }, items.map(it => {
+      const existing = have.get(`guardian:${it.id}`);
+      return h('li', { onclick: () => { s.close(); existing ? go(`#/p/${existing.id}/solve`) : importGuardian(it); } },
+        h('div', { class: 'row1' },
+          h('span', { class: 'title' }, it.title.replace(/^Cryptic crossword\s*/i, 'Cryptic ')),
+          h('span', { class: 'date' }, fmtDay(isoDay(Date.parse(it.date))))),
+        existing ? h('div', { class: 'sub' }, '✓ In your puzzles — ' + statusLine(existing)) : null);
+    })));
+  } catch (err) {
+    listEl.replaceChildren(h('p', { class: 'hint' }, err.message || String(err)));
+  }
+}
+
+async function importGuardian(item) {
+  const done = busy('Fetching from the Guardian…');
+  try {
+    const f = Guardian.toPuzzle(await Guardian.fetchCrossword(item.id));
+    const p = {
+      id: newId(), title: f.title, created: Date.now(), meta: f.meta, sourceId: f.sourceId || `guardian:${item.id}`,
+      image: null, clueImage: null, corners: null, rows: f.rows, cols: f.cols, blocks: f.blocks,
+      cluesText: f.cluesText, clues: P.cluesFromText(f.cluesText), cluesStatus: 'done',
+      solution: f.solution, fill: null, stage: 'solve',
+    };
+    resetFill(p);
+    cache.set(p.id, p);
+    await DB.savePuzzle(p);
+    go(`#/p/${p.id}/solve`);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || String(err), 5000);
+  } finally {
+    done();
+  }
 }
 
 // Back up / restore all puzzles (moving them between Safari and the home-screen app on iPhone).
@@ -1137,6 +1188,7 @@ async function solveView(p) {
       c.classList.toggle('sel', i === sel);
       c.classList.toggle('word', inWord.has(i) && i !== sel);
       c.classList.toggle('pencil', !!(p.fill[i] && p.pencil[i]));
+      c.classList.toggle('wrong', !!(p.wrong && p.wrong[i] && p.fill[i]));
       c.letter.textContent = p.fill[i] || '';
     }
     if (w) {
@@ -1159,17 +1211,36 @@ async function solveView(p) {
     p.cursor = { i: sel, dir };
   }
 
+  // With the answers known (Guardian imports), finished means every square is right.
+  const isSolved = () => p.solution && p.fill.every((v, i) => p.blocks[i] || v === p.solution[i]);
   function changed() {
     saveSoon(p);
     if (anyRefs) renderList();
     update();
-    if (p.completedTime == null && isComplete()) {
-      stopTimer();
-      p.completedTime = p.timeMs;
-      renderTimer();
-      saveSoon(p);
-      toast(`🎉 Finished in ${fmtTime(p.completedTime)}!`, 4000);
+    if (p.completedTime != null || !isComplete()) return;
+    if (p.solution && !isSolved()) {
+      if (!p.fullWarned) { p.fullWarned = true; toast('Every square is filled, but some are wrong. ⋯ → Check all answers.', 4500); }
+      return;
     }
+    stopTimer();
+    p.completedTime = p.timeMs;
+    renderTimer();
+    saveSoon(p);
+    toast(`🎉 ${p.solution ? 'Solved' : 'Finished'} in ${fmtTime(p.completedTime)}!`, 4000);
+  }
+  // Mark wrong letters (red until changed). Empty squares aren't counted.
+  function checkCells(cellList) {
+    if (!p.wrong || p.wrong.length !== N) p.wrong = new Array(N).fill(false);
+    let wrong = 0, filled = 0;
+    for (const i of cellList) {
+      if (!p.fill[i]) continue;
+      filled++;
+      p.wrong[i] = p.fill[i] !== p.solution[i];
+      if (p.wrong[i]) wrong++;
+    }
+    saveSoon(p);
+    update();
+    toast(!filled ? 'Nothing to check yet.' : wrong ? `${wrong} wrong square${wrong === 1 ? '' : 's'} (in red).` : 'All correct so far ✓', 3000);
   }
 
   // Timer: counts while the puzzle is on screen, from first opening until every square is filled.
@@ -1242,6 +1313,7 @@ async function solveView(p) {
     if (target) { dir = target[0].dir; sel = target[1]; update(); } else selectWord(next, false);
   }
   function type(ch) {
+    if (p.wrong) p.wrong[sel] = false;
     p.fill[sel] = ch;
     p.pencil[sel] = !!p.pencilMode;
     const w = wordOf(sel, dir);
@@ -1266,6 +1338,7 @@ async function solveView(p) {
       else if (prevPart) { dir = prevPart.dir; sel = prevPart.cells[prevPart.cells.length - 1]; p.fill[sel] = ''; }
     }
     p.pencil[sel] = false;
+    if (p.wrong) p.wrong[sel] = false;
     changed();
   }
   function move(dr, dc) {
@@ -1384,6 +1457,12 @@ async function solveView(p) {
     const s = sheet('Puzzle', h('div', { class: 'menu' },
       h('button', { onclick: () => { s.close(); editClue(); } }, '✎  Edit this clue'),
       p.image ? h('button', { onclick: () => { s.close(); showPhoto(); } }, '🖼  Show photo') : null,
+      p.solution ? h('button', { onclick: () => {
+        s.close();
+        const w = wordOf(sel, dir);
+        if (w) checkCells(groupWords(w).flatMap(x => x.cells));
+      } }, '✔︎  Check this answer') : null,
+      p.solution ? h('button', { onclick: () => { s.close(); checkCells(p.fill.map((_, i) => i).filter(i => !p.blocks[i])); } }, '✔︎  Check all answers') : null,
       h('button', { onclick: () => { s.close(); anagram(); } }, '🔀  Anagram helper'),
       h('button', { onclick: () => go(`#/p/${p.id}/clues`) }, '✏️  Edit clues'),
       h('button', { onclick: () => go(`#/p/${p.id}/${p.image ? 'corners' : 'grid'}`) }, '▦  Fix grid'),
@@ -1395,7 +1474,7 @@ async function solveView(p) {
       h('button', { onclick: () => {
         if (!confirm('Clear all your answers and reset the timer?')) return;
         stopTimer();
-        resetFill(p); p.pencil = new Array(N).fill(false);
+        resetFill(p); p.pencil = new Array(N).fill(false); p.wrong = null; p.fullWarned = false;
         p.timeMs = 0; p.completedTime = null;
         startTimer(); renderTimer(); changed(); s.close();
       } }, '🧹  Clear answers'),
