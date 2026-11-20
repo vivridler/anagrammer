@@ -13,6 +13,9 @@ normal app and works offline (except clue scanning the first time, which downloa
 
 0. **Your puzzles** – each shows its source, setter, number and publishing date (sort by any of them; newest
    first by default), the first clue, how much is filled in and the time spent. Tap + to add one.
+1. **Guardian** – + → *Guardian cryptic* lists recent Guardian cryptics; tap one to import it exactly (with
+   answers, so ⋯ → *Check this answer / Check all answers* work). Uses the Guardian Content API; the shared
+   "test" key is used unless you set your own (⚙︎ in the list).
 1. **Photo** – take a picture or pick a screenshot of a crossword page. That's it: the app finds the grid,
    straightens it, works out its size and black squares, and opens the puzzle ready to solve.
 2. **Clues load automatically** in the background (on-device text recognition with Tesseract.js). The page
@@ -36,5 +39,6 @@ answer checking because a photo doesn't contain the answers.
 **Code:** plain HTML/CSS/ES modules, no build step.
 `js/vision.js` (grid detection, perspective correction, clue-column layout), `js/puzzle.js` (numbering, clue
 parsing and repair),
-`js/importer.js` (photo → puzzle pipeline), `js/app.js` (screens), `js/store.js` (storage), `js/ocr.js`
+`js/importer.js` (photo → puzzle pipeline), `js/guardian.js` (Guardian import), `js/backup.js`
+(back up / restore), `js/app.js` (screens), `js/store.js` (storage), `js/ocr.js`
 (text recognition), `sw.js` (offline cache).
