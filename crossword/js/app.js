@@ -520,7 +520,16 @@ async function homeView() {
         h('p', {}, 'Snap a photo of a crossword from a newspaper, magazine or screen, and solve it here.'),
         h('p', { class: 'hint-add' }, 'Tap + to add your first crossword.'))),
     h('button', { class: 'fab', 'aria-label': 'Add a crossword', onclick: addMenu }, '+'));
-  app.querySelector('.bar h1').setAttribute('aria-label', headerWord.toLowerCase()); // read as a word, not letter by letter
+  const bar = app.querySelector('.bar');
+  bar.classList.add('home-bar');
+  const h1 = bar.querySelector('h1');
+  h1.classList.add('brand');
+  h1.setAttribute('aria-label', headerWord.toLowerCase()); // read as a word, not letter by letter
+  // Big, but shrink a long word until it fits beside the menu button.
+  requestAnimationFrame(() => {
+    let size = parseFloat(getComputedStyle(h1).fontSize);
+    while (h1.scrollWidth > h1.clientWidth && size > 16) { size -= 1; h1.style.fontSize = size + 'px'; }
+  });
 }
 
 // ---------- fix grid: corners ----------
