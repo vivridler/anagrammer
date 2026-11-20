@@ -1,4 +1,4 @@
-# Crossword Solver – to-do
+# Squares (crossword solver) – to-do
 
 Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 
@@ -43,6 +43,11 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   can see which clues use its answer.
 - [x] **Referenced answers follow the letter pattern** – the bracketed answer is laid out like its clue's
   lengths, e.g. 24-down (3,2) shows as "[ARC UP]", not "[ARCUP]"; hyphens are kept.
+- [x] **Puzzle library** – each puzzle has a source, setter, number and publishing date (⋯ → *Details*; setter
+  and number guessed from the page heading, source carried over from the last puzzle, date = import day).
+  Sorted by publishing date by default, or by source, setter or number. Grid previews removed; shows % filled,
+  time spent and the first clue. New puzzles via a + button at the bottom right.
+- [x] **Rename the app to Squares** with a placeholder icon: white squircle, black outline, "42" top right.
 
 ## Notes on how these work
 
