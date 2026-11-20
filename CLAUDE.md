@@ -9,6 +9,6 @@
 
 ## Project
 
-- `crossword/` is the Crossword Solver phone app: plain HTML/CSS/ES modules, no build step, published by the
+- `crossword/` is **Squares**, the crossword solver phone app: plain HTML/CSS/ES modules, no build step, published by the
   GitHub Pages workflow on pushes to `main`. See `README.md` for how it works and what each file does.
 - Bump `CACHE` in `crossword/sw.js` whenever app files change, so installed copies update.

@@ -366,3 +366,38 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
 .cluelist .li-text { flex: 1; min-width: 0; }
 .cluebar .clue-deps { font-size: 12px; }
 .edit-clue.big .clue-input { font-size: 16px; }
+
+/* ---- library (home) ---- */
+.home { padding-bottom: 96px; }
+.sortbar { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; overflow-x: auto; }
+.sort-label { font-size: 13px; color: var(--muted); margin-right: 2px; }
+.chip { min-height: 32px; padding: 4px 12px; border-radius: 999px; font-size: 14px; white-space: nowrap; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.library li { display: block; padding: 12px 14px; }
+.library .row1 { display: flex; align-items: baseline; gap: 10px; }
+.library .row1 .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.library .row1 .date { flex: none; font-size: 13px; color: var(--muted); }
+.library .first-clue {
+  font-style: italic; color: var(--text); opacity: .8; margin: 4px 0 2px; font-size: 15px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.library .sub { margin-top: 2px; font-variant-numeric: tabular-nums; }
+.hint-add { font-size: 14px; }
+
+.fab {
+  position: fixed; z-index: 20;
+  right: calc(20px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom));
+  width: 60px; height: 60px; border-radius: 50%; padding: 0;
+  background: var(--accent); border: 0; color: #fff;
+  font-size: 34px; line-height: 1; font-weight: 300;
+  box-shadow: 0 4px 14px rgba(0,0,0,.3);
+}
+.fab:active { filter: brightness(.9); }
+
+/* ---- details form ---- */
+.details { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+.field input {
+  font: 17px system-ui, sans-serif; padding: 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+}

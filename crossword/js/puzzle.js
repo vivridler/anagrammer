@@ -293,3 +293,28 @@ export function formatAnswer(letters, enumeration) {
   });
   return out;
 }
+
+// ---- Puzzle details from the page heading ----
+
+// Guess the setter ("by DA") and puzzle number ("No. 1335", "#1335", or a lone number)
+// from OCR'd page text. Returns only what it finds, e.g. { setter: 'DA', number: '1335' }.
+export function guessMeta(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const firstHeader = lines.findIndex(l => HEADER.test(l));
+  const head = firstHeader >= 0 ? lines.slice(0, firstHeader) : lines.slice(0, 3);
+  const out = {};
+  for (const l of head) {
+    const m = l.match(/\bby\s+([A-Z][A-Za-z.'’-]*(?:\s+[A-Z][A-Za-z.'’-]*){0,2})/);
+    if (m) { out.setter = m[1].replace(/\s+\d+$/, '').trim(); break; }
+  }
+  for (const l of head) {
+    const m = l.match(/(?:\bno\.?|\bnumber|#)\s*(\d{1,3}(?:,\d{3})+|\d{2,6})\b/i) || l.match(/\s(\d{3,6})\s*$/);
+    if (m) { out.number = m[1].replace(/,/g, ''); break; }
+  }
+  if (!out.number) {
+    // A number on a line of its own anywhere (e.g. "1335" in the corner of the heading).
+    const lone = lines.find(l => /^\d{3,6}$/.test(l));
+    if (lone) out.number = lone;
+  }
+  return out;
+}

@@ -105,6 +105,36 @@ function filePicker({ capture } = {}) {
 }
 
 const otherDir = d => (d === 'across' ? 'down' : 'across');
+
+const fmtTime = ms => {
+  const t = Math.floor((ms || 0) / 1000), hh = Math.floor(t / 3600), mm = Math.floor(t / 60) % 60, ss = t % 60;
+  return (hh ? `${hh}:${String(mm).padStart(2, '0')}` : `${mm}`) + ':' + String(ss).padStart(2, '0');
+};
+const isoDay = ms => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const fmtDay = iso => {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return y ? new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+};
+// Puzzle details: source (paper), setter, number, publishing date.
+function metaOf(p) {
+  p.meta = p.meta || {};
+  return { source: p.meta.source || '', setter: p.meta.setter || '', number: p.meta.number || '', date: p.meta.date || isoDay(p.created || Date.now()) };
+}
+function displayTitle(p) {
+  const m = metaOf(p);
+  if (!m.source && !m.setter && !m.number) return p.title || 'Crossword';
+  return [m.source, m.setter].filter(Boolean).join(' · ') + (m.number ? `${m.source || m.setter ? ' ' : ''}#${m.number}` : '');
+}
+// The most recent source used, to pre-fill new puzzles (you probably import the same paper).
+async function lastSource() {
+  const list = await DB.listPuzzles();
+  const withSource = list.filter(x => x.meta && x.meta.source).sort((a, b) => (b.created || 0) - (a.created || 0));
+  return withSource.length ? withSource[0].meta.source : '';
+}
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
 const dirLabel = d => (d === 'across' ? 'Across' : 'Down');
 
 // ---------- puzzle storage (one shared object per puzzle, so views and background jobs agree) ----------
@@ -170,6 +200,10 @@ function startClueJob(p, { replace = false } = {}) {
       }
       p.clues = P.cluesFromText(p.cluesText);
       p.cluesStatus = 'done';
+      p.ocrText = text;
+      const guess = P.guessMeta(text);
+      p.meta = p.meta || {};
+      for (const k of ['setter', 'number']) if (!p.meta[k] && guess[k]) p.meta[k] = guess[k];
       emit({ done: true, report: P.clueReport(num, p.clues) });
     } catch (err) {
       console.error(err);
@@ -280,24 +314,6 @@ async function route() {
 
 // ---------- home / library ----------
 
-function miniGrid(p) {
-  const c = h('canvas', { class: 'thumb' });
-  const size = 56, dpr = window.devicePixelRatio || 1;
-  c.width = c.height = size * dpr;
-  const ctx = c.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size);
-  if (p.blocks) {
-    const cs = size / Math.max(p.rows, p.cols);
-    for (let r = 0; r < p.rows; r++) for (let col = 0; col < p.cols; col++) {
-      const i = r * p.cols + col;
-      if (p.blocks[i]) { ctx.fillStyle = '#222'; ctx.fillRect(col * cs, r * cs, cs, cs); }
-      else if (p.fill && p.fill[i]) { ctx.fillStyle = '#8ab4f8'; ctx.fillRect(col * cs + cs * .2, r * cs + cs * .2, cs * .6, cs * .6); }
-    }
-  }
-  return c;
-}
-
 function progressOf(p) {
   if (!p.blocks || !p.fill) return null;
   let open = 0, filled = 0;
@@ -321,8 +337,10 @@ async function createFromImage(file) {
     await new Promise(r => setTimeout(r, 30));
     const corners = findCorners(img);
     const grid = analyzeGrid(img, corners);
+    const source = await lastSource();
     const p = {
       id: newId(), title: 'Crossword ' + new Date().toLocaleDateString(), created: Date.now(),
+      meta: { source, setter: '', number: '', date: isoDay(Date.now()) },
       image: blob, imageWidth: img.naturalWidth, clueImage: null, corners, rows: grid.rows, cols: grid.cols, blocks: grid.blocks,
       detectedFor: JSON.stringify(corners),
       cluesText: { across: '', down: '' }, clues: { across: {}, down: {} }, fill: null, stage: 'solve',
@@ -349,6 +367,7 @@ async function createBlank() {
   const rows = Math.min(30, Math.max(3, +m[1])), cols = Math.min(30, Math.max(3, +(m[2] || m[1])));
   const p = {
     id: newId(), title: 'Crossword ' + new Date().toLocaleDateString(), created: Date.now(),
+    meta: { source: await lastSource(), setter: '', number: '', date: isoDay(Date.now()) },
     image: null, clueImage: null, corners: null, rows, cols, blocks: new Array(rows * cols).fill(0),
     cluesText: { across: '', down: '' }, clues: { across: {}, down: {} }, fill: null, stage: 'solve',
   };
@@ -358,32 +377,91 @@ async function createBlank() {
   go(`#/p/${p.id}/grid`);
 }
 
+const SORTS = { date: 'Date', source: 'Source', setter: 'Setter', number: 'Number' };
+
+function sortPuzzles(list, key, dir) {
+  const byDate = (a, b) => metaOf(b).date.localeCompare(metaOf(a).date) || (b.created || 0) - (a.created || 0);
+  const cmp = {
+    date: byDate,
+    source: (a, b) => metaOf(a).source.localeCompare(metaOf(b).source, undefined, { sensitivity: 'base' }),
+    setter: (a, b) => metaOf(a).setter.localeCompare(metaOf(b).setter, undefined, { sensitivity: 'base' }),
+    number: (a, b) => (parseInt(metaOf(b).number, 10) || 0) - (parseInt(metaOf(a).number, 10) || 0),
+  }[key];
+  const empty = p => key !== 'date' && !metaOf(p)[key];
+  return [...list].sort((a, b) => {
+    if (empty(a) !== empty(b)) return empty(a) ? 1 : -1; // puzzles missing this detail go last
+    const c = cmp(a, b) * (dir === 'asc' ? -1 : 1);
+    return c || byDate(a, b);
+  });
+}
+
+// First clue with real text (Across first), skipping "See 23-down" style cross-references.
+function firstClue(p) {
+  for (const d of ['across', 'down']) {
+    const list = (p.clues && p.clues[d]) || {};
+    for (const n of Object.keys(list).map(Number).sort((a, b) => a - b)) {
+      const t = P.clueBody(list[n]);
+      if (t && !/^see\b/i.test(t)) return t;
+    }
+  }
+  return '';
+}
+
+function statusLine(p) {
+  if (jobs.has(p.id)) return 'Reading clues…';
+  if (p.completedTime != null) return `✓ Finished · ${fmtTime(p.completedTime)}`;
+  const pct = progressOf(p);
+  const parts = [pct === null ? '' : `${pct}%`, p.timeMs >= 1000 ? `⏱ ${fmtTime(p.timeMs)}` : ''].filter(Boolean);
+  return parts.join(' · ') || 'Not started';
+}
+
+function addMenu() {
+  const s = sheet('New crossword', h('div', { class: 'menu' },
+    h('button', { class: 'primary', onclick: async () => { s.close(); createFromImage(await filePicker({ capture: true })); } }, '📷  Take a photo'),
+    h('button', { onclick: async () => { s.close(); createFromImage(await filePicker()); } }, '🖼  Choose an image'),
+    h('button', { onclick: () => { s.close(); createBlank(); } }, '▦  Blank grid')));
+}
+
 async function homeView() {
-  const puzzles = (await DB.listPuzzles()).map(p => cache.get(p.id) || p);
-  const list = puzzles.length
-    ? h('ul', { class: 'library' }, puzzles.map(p => {
-        const pct = progressOf(p);
-        return h('li', { onclick: () => go(`#/p/${p.id}/solve`) },
-          miniGrid(p),
-          h('div', { class: 'meta' },
-            h('div', { class: 'title' }, p.title),
-            h('div', { class: 'sub' },
-              jobs.has(p.id) ? 'Reading clues…' : (pct === null ? '' : `${pct}% filled`),
-              ' · ', new Date(p.updated || p.created).toLocaleDateString())));
-      }))
-    : h('div', { class: 'empty' },
-        h('div', { class: 'big' }, '▦'),
-        h('p', {}, 'Snap a photo of a crossword from a newspaper, magazine or screen, and solve it here.'));
+  const all = (await DB.listPuzzles()).map(p => cache.get(p.id) || p);
+  let key = store.get('squares.sort', 'date');
+  if (!SORTS[key]) key = 'date';
+  let dir = store.get('squares.sortDir', 'desc');
+
+  const listEl = h('ul', { class: 'library' });
+  const chips = h('div', { class: 'sortbar', role: 'group', 'aria-label': 'Sort puzzles' });
+  function render() {
+    chips.replaceChildren(h('span', { class: 'sort-label' }, 'Sort'), ...Object.entries(SORTS).map(([k, label]) =>
+      h('button', {
+        class: 'chip' + (k === key ? ' on' : ''), 'aria-pressed': k === key ? 'true' : 'false',
+        onclick: () => {
+          if (k === key) dir = dir === 'desc' ? 'asc' : 'desc';
+          else { key = k; dir = 'desc'; }
+          store.set('squares.sort', key); store.set('squares.sortDir', dir);
+          render();
+        },
+      }, label, k === key ? (dir === 'desc' ? ' ↓' : ' ↑') : '')));
+    listEl.replaceChildren(...sortPuzzles(all, key, dir).map(p => {
+      const clue = firstClue(p);
+      return h('li', { onclick: () => go(`#/p/${p.id}/solve`) },
+        h('div', { class: 'row1' },
+          h('span', { class: 'title' }, displayTitle(p)),
+          h('span', { class: 'date' }, fmtDay(metaOf(p).date))),
+        clue ? h('div', { class: 'first-clue' }, clue) : null,
+        h('div', { class: 'sub' }, statusLine(p)));
+    }));
+  }
+  render();
 
   app.replaceChildren(
-    header('Crossword Solver'),
-    h('main', { class: 'scroll pad' },
-      h('div', { class: 'cta' },
-        h('button', { class: 'primary', onclick: async () => createFromImage(await filePicker({ capture: true })) }, '📷  Take a photo'),
-        h('button', { onclick: async () => createFromImage(await filePicker()) }, '🖼  Choose an image'),
-        h('button', { class: 'ghost', onclick: createBlank }, '▦  Blank grid')),
-      puzzles.length ? h('h2', { class: 'section' }, 'Your puzzles') : null,
-      list));
+    header('Squares'),
+    h('main', { class: 'scroll pad home' },
+      all.length ? chips : null,
+      all.length ? listEl : h('div', { class: 'empty' },
+        h('div', { class: 'big' }, '▦'),
+        h('p', {}, 'Snap a photo of a crossword from a newspaper, magazine or screen, and solve it here.'),
+        h('p', { class: 'hint-add' }, 'Tap + to add your first crossword.'))),
+    h('button', { class: 'fab', 'aria-label': 'Add a crossword', onclick: addMenu }, '+'));
 }
 
 // ---------- fix grid: corners ----------
@@ -1030,10 +1108,6 @@ async function solveView(p) {
   p.timeMs = p.timeMs || 0;
   let runningSince = null;
   const timerEl = h('span', { class: 'timer', 'aria-label': 'Time' });
-  const fmtTime = ms => {
-    const t = Math.floor(ms / 1000), hh = Math.floor(t / 3600), mm = Math.floor(t / 60) % 60, ss = t % 60;
-    return (hh ? `${hh}:${String(mm).padStart(2, '0')}` : `${mm}`) + ':' + String(ss).padStart(2, '0');
-  };
   const elapsed = () => p.timeMs + (runningSince ? Date.now() - runningSince : 0);
   function renderTimer() {
     timerEl.textContent = p.completedTime != null ? `✓ ${fmtTime(p.completedTime)}` : `⏱ ${fmtTime(elapsed())}`;
@@ -1154,6 +1228,7 @@ async function solveView(p) {
   listen(bus, 'clues', e => {
     if (e.detail.id !== p.id) return;
     if (e.detail.done) {
+      titleEl.textContent = displayTitle(p);
       refreshClues();
       if (e.detail.error) toast(`Couldn't read the clues: ${e.detail.error}`, 4500);
       else {
@@ -1248,11 +1323,7 @@ async function solveView(p) {
         if (!confirm('Read all clues from the photo again? This replaces the current clues.')) return;
         startClueJob(p, { replace: true }); s.close(); update();
       } }, '↻  Read clues again') : null,
-      h('button', { onclick: () => {
-        const t = prompt('Name this puzzle:', p.title);
-        if (t) { p.title = t.trim(); titleEl.textContent = p.title; saveSoon(p); }
-        s.close();
-      } }, '🏷  Rename'),
+      h('button', { onclick: () => { s.close(); editDetails(); } }, '🏷  Details (source, setter, number, date)'),
       h('button', { onclick: () => {
         if (!confirm('Clear all your answers and reset the timer?')) return;
         stopTimer();
@@ -1269,7 +1340,34 @@ async function solveView(p) {
       } }, '🗑  Delete puzzle')));
   }
 
-  const bar = header(p.title, {
+  async function editDetails() {
+    const m = metaOf(p);
+    const others = (await DB.listPuzzles()).filter(x => x.id !== p.id && x.meta);
+    const options = k => [...new Set(others.map(x => x.meta[k]).filter(Boolean))].sort().map(v => h('option', { value: v }));
+    const field = (label, input) => h('label', { class: 'field' }, h('span', {}, label), input);
+    const inputs = {
+      source: h('input', { type: 'text', value: m.source, list: 'dl-source', placeholder: 'e.g. The Age', autocapitalize: 'words' }),
+      setter: h('input', { type: 'text', value: m.setter, list: 'dl-setter', placeholder: 'e.g. DA', autocapitalize: 'words' }),
+      number: h('input', { type: 'text', value: m.number, inputmode: 'numeric', placeholder: 'e.g. 1335' }),
+      date: h('input', { type: 'date', value: m.date }),
+    };
+    const s = sheet('Details', h('div', { class: 'details pad' },
+      field('Source', inputs.source), h('datalist', { id: 'dl-source' }, options('source')),
+      field('Setter', inputs.setter), h('datalist', { id: 'dl-setter' }, options('setter')),
+      field('Number', inputs.number),
+      field('Published', inputs.date),
+      h('div', { class: 'toolbar flat' }, h('span', { class: 'grow' }, ), h('button', {
+        class: 'primary', onclick: () => {
+          p.meta = Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value.trim()]));
+          if (!p.meta.date) p.meta.date = isoDay(p.created || Date.now());
+          titleEl.textContent = displayTitle(p);
+          saveSoon(p);
+          s.close();
+        },
+      }, 'Save'))));
+  }
+
+  const bar = header(displayTitle(p), {
     back: '#/',
     actions: [
       h('button', { class: 'icon list-btn', 'aria-label': 'Clue list', onclick: () => document.body.classList.toggle('list-open') }, '☰'),
@@ -1277,7 +1375,7 @@ async function solveView(p) {
     ],
   });
   const h1 = bar.querySelector('h1');
-  const titleEl = h('span', { class: 't' }, p.title);
+  const titleEl = h('span', { class: 't' }, displayTitle(p));
   h1.replaceChildren(titleEl, timerEl);
   h1.classList.add('with-timer');
   document.body.classList.add('solving');
