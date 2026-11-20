@@ -2,6 +2,7 @@ import * as V from './vision.js';
 import * as P from './puzzle.js';
 import * as DB from './store.js';
 import { analyzeGrid, findCorners, readClueText, cluesFromOcr, scaledCanvas } from './importer.js';
+import { makeBackup, restoreBackup, saveFile } from './backup.js';
 
 const app = document.getElementById('app');
 
@@ -95,9 +96,9 @@ function fitCanvas(canvas, cssW, cssH) {
   return ctx;
 }
 
-function filePicker({ capture } = {}) {
+function filePicker({ capture, accept = 'image/*' } = {}) {
   return new Promise(resolve => {
-    const input = h('input', { type: 'file', accept: 'image/*', capture: capture ? 'environment' : null, style: 'display:none' });
+    const input = h('input', { type: 'file', accept, capture: capture ? 'environment' : null, style: 'display:none' });
     input.addEventListener('change', () => { resolve(input.files[0] || null); input.remove(); });
     document.body.append(input);
     input.click();
@@ -422,6 +423,46 @@ function addMenu() {
     h('button', { onclick: () => { s.close(); createBlank(); } }, '▦  Blank grid')));
 }
 
+// Back up / restore all puzzles (moving them between Safari and the home-screen app on iPhone).
+function backupMenu() {
+  const status = h('p', { class: 'hint' });
+  const body = h('div', { class: 'menu' },
+    h('p', { class: 'hint' }, 'On iPhone, Safari and the home-screen app keep separate puzzles, and deleting the home-screen icon deletes its puzzles. To move them, back up in one and restore in the other. Restoring only adds puzzles; it never deletes any.'),
+    h('button', { onclick: prepare }, '⬆︎  Back up all puzzles'),
+    h('button', { onclick: restore }, '⬇︎  Restore from a backup file'),
+    status);
+  const s = sheet('Back up & restore', body);
+  async function prepare() {
+    status.textContent = 'Preparing backup…';
+    try {
+      const { file, count } = await makeBackup();
+      // Sharing needs a fresh tap on iPhone, so offer the file as a second step.
+      const mb = (file.size / 1e6).toFixed(1);
+      status.replaceChildren(`Backup ready: ${count} puzzle${count === 1 ? '' : 's'}, ${mb} MB. `,
+        h('button', { class: 'primary small', onclick: async () => {
+          const how = await saveFile(file);
+          if (how !== 'cancelled') status.textContent = how === 'shared' ? 'Backup saved.' : `Backup downloaded as ${file.name}.`;
+        } }, 'Save backup file'));
+    } catch (err) {
+      status.textContent = 'Could not make the backup: ' + (err.message || err);
+    }
+  }
+  async function restore() {
+    const file = await filePicker({ accept: '.json,application/json' });
+    if (!file) return;
+    status.textContent = 'Restoring…';
+    try {
+      const r = await restoreBackup(file);
+      cache.clear();
+      s.close();
+      toast(`Restored ${r.added} new puzzle${r.added === 1 ? '' : 's'}` + (r.updated ? `, updated ${r.updated}` : '') + (r.skipped ? ` (${r.skipped} already up to date)` : '') + '.', 4500);
+      route();
+    } catch (err) {
+      status.textContent = err.message || String(err);
+    }
+  }
+}
+
 async function homeView() {
   const all = (await DB.listPuzzles()).map(p => cache.get(p.id) || p);
   let key = store.get('squares.sort', 'date');
@@ -454,7 +495,7 @@ async function homeView() {
   render();
 
   app.replaceChildren(
-    header('Squares'),
+    header('Squares', { actions: [h('button', { class: 'icon', 'aria-label': 'Back up and restore', onclick: backupMenu }, '⋯')] }),
     h('main', { class: 'scroll pad home' },
       all.length ? chips : null,
       all.length ? listEl : h('div', { class: 'empty' },

@@ -48,6 +48,9 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   Sorted by publishing date by default, or by source, setter or number. Grid previews removed; shows % filled,
   time spent and the first clue. New puzzles via a + button at the bottom right.
 - [x] **Rename the app to Squares** with a placeholder icon: white squircle, black outline, "42" top right.
+- [x] **Back up & restore** – ⋯ on the puzzles screen saves all puzzles to a file and restores them. On iPhone,
+  Safari and the home-screen app keep separate storage (and deleting the home-screen icon deletes its puzzles),
+  so this is how to move puzzles between them. Restoring only adds or updates, never deletes.
 
 ## Notes on how these work
 
