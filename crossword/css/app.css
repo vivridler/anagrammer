@@ -377,9 +377,10 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
 .library .row1 { display: flex; align-items: baseline; gap: 10px; }
 .library .row1 .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .library .row1 .date { flex: none; font-size: 13px; color: var(--muted); }
+/* The whole first clue, wrapping onto as many lines as it needs. */
 .library .first-clue {
   font-style: italic; color: var(--text); opacity: .8; margin: 4px 0 2px; font-size: 15px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: normal; overflow-wrap: anywhere;
 }
 .library .sub { margin-top: 2px; font-variant-numeric: tabular-nums; }
 .hint-add { font-size: 14px; }
