@@ -42,6 +42,9 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* The page's outermost background is what the phone shows in the status-bar area above the header,
+   so match the header (white, or dark in dark mode). The body keeps the grey page colour. */
+html { background: var(--surface); }
 body {
   background: var(--bg);
   color: var(--text);
