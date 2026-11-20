@@ -31,3 +31,5 @@ export const listPuzzles = async () =>
   ((await tx('readonly', s => s.getAll())) || []).sort((a, b) => b.updated - a.updated);
 export const savePuzzle = p => { p.updated = Date.now(); return tx('readwrite', s => s.put(p)); };
 export const deletePuzzle = id => tx('readwrite', s => s.delete(id));
+// Store a puzzle exactly as given (used when restoring a backup, keeps its 'updated' time).
+export const putPuzzleRaw = p => tx('readwrite', s => s.put(p));

@@ -26,7 +26,9 @@ normal app and works offline (except clue scanning the first time, which downloa
    toggle squares over the photo. ⋯ also has *Show photo*, the anagram helper, re-reading the clues, *Details*
    (source, setter, number, date; setter and number are guessed from the page heading) and clearing.
 
-Puzzles and progress are stored on the device (IndexedDB); nothing is uploaded.
+Puzzles and progress are stored on the device (IndexedDB); nothing is uploaded. On iPhone, Safari and the
+home-screen app each have their own storage, and deleting the home-screen icon deletes its puzzles: use ⋯ →
+*Back up & restore* on the puzzles screen to move them (back up in one, restore in the other).
 
 **Limitations:** grids with black squares only (barred cryptic grids aren't supported), up to 30×30; there is no
 answer checking because a photo doesn't contain the answers.
