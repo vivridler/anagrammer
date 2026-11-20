@@ -41,6 +41,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   the reference moves to that clue.
 - [x] **Show which clues depend on this one** – e.g. 24-down shows "Mentioned in 10A, 12A" (tappable), so you
   can see which clues use its answer.
+- [x] **Referenced answers follow the letter pattern** – the bracketed answer is laid out like its clue's
+  lengths, e.g. 24-down (3,2) shows as "[ARC UP]", not "[ARCUP]"; hyphens are kept.
 
 ## Notes on how these work
 

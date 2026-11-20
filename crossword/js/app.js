@@ -830,7 +830,9 @@ async function solveView(p) {
   let anyRefs = false;
   const answerOf = w => {
     const letters = groupWords(w).flatMap(x => x.cells).map(i => p.fill[i]);
-    return letters.every(Boolean) ? letters.join('') : '';
+    if (!letters.every(Boolean)) return '';
+    // Follow the referenced clue's letter pattern, e.g. (3,2) -> "ARC UP".
+    return P.formatAnswer(letters.join(''), P.parseEnumeration(clueText(mainOf(w))));
   };
   const refSpan = w => h('span', { class: 'ref', 'data-dir': w.dir, 'data-num': w.num }, shortName(w));
   const refTarget = el => {

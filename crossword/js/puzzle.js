@@ -280,3 +280,16 @@ export function findRefs(text, num) {
   }
   return out;
 }
+
+// Lay out answer letters to match a clue's (lengths): "ARCUP" + (3,2) -> "ARC UP", (5-4,6) keeps the hyphen.
+// Letters are returned unchanged if the lengths don't fit.
+export function formatAnswer(letters, enumeration) {
+  if (!enumeration || enumeration.lengths.reduce((a, b) => a + b, 0) !== letters.length) return letters;
+  let out = '', at = 0;
+  enumeration.lengths.forEach((len, k) => {
+    out += letters.slice(at, at + len);
+    at += len;
+    if (k < enumeration.seps.length) out += enumeration.seps[k] === '-' ? '-' : ' ';
+  });
+  return out;
+}

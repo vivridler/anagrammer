@@ -1,5 +1,5 @@
 // Offline support for the app shell.
-const CACHE = 'crossword-v9';
+const CACHE = 'crossword-v10';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/importer.js', 'js/vision.js', 'js/puzzle.js', 'js/store.js', 'js/ocr.js',
