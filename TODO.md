@@ -54,6 +54,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] **First clue shown in full** on the puzzles screen (wraps instead of being cut off).
 - [x] **Header word** – the puzzles screen's header shows a random synonym of "cross" (ANGRY, TRAVERSE, ROOD…) in
   boxed letters like 🅂🅀🅄🄰🅁🄴🅂, different each time the screen loads. The app's name stays Squares.
+- [ ] **Status-bar area above the header still grey on iPhone** – tried making the page's outer background white
+  (20 Nov); needs checking on the phone and another approach if it's still grey.
 
 ## Notes on how these work
 
