@@ -107,10 +107,34 @@ function numberVariants(n) {
   return [...out].filter(v => v && !/^0/.test(v)).map(Number);
 }
 
+// Put each clue under the direction the grid says it belongs to. Page layouts sometimes put Down
+// clues beside the Across ones, before the "Down" heading. A clue moves only when its number doesn't
+// exist in its current direction, is already taken there, or its (length) only fits the other one.
+function rebinByGrid(parsed, num) {
+  const len = { across: new Map(num.across.map(w => [w.num, w.cells.length])), down: new Map(num.down.map(w => [w.num, w.cells.length])) };
+  const total = t => { const e = parseEnumeration(t); return e ? e.lengths.reduce((a, b) => a + b, 0) : null; };
+  const out = { across: [], down: [] };
+  const taken = { across: new Set(), down: new Set() };
+  for (const dir of ['across', 'down']) {
+    for (const [n, t] of parsed[dir]) {
+      const other = dir === 'across' ? 'down' : 'across';
+      const fits = d => len[d].has(n) && !/^\(with /i.test(t) && total(t) != null ? total(t) === len[d].get(n) : len[d].has(n);
+      let to = dir;
+      if (len[other].has(n) && !taken[other].has(n)) {
+        if (!len[dir].has(n) || taken[dir].has(n) || (fits(other) && !fits(dir))) to = other;
+      }
+      taken[to].add(n);
+      out[to].push([n, t]);
+    }
+  }
+  for (const d of ['across', 'down']) out[d].sort((a, b) => a[0] - b[0]);
+  return out;
+}
+
 // Use the grid to repair OCR'd clues: fix impossible clue numbers, split a list
 // whose "Down" heading was missed, and add missing (length) enumerations.
 export function reconcileClues(parsed, num) {
-  const lists = { across: [...parsed.across], down: [...parsed.down] };
+  const lists = rebinByGrid(parsed, num);
   if (!lists.down.length) {
     const k = lists.across.findIndex((c, i) => i > 0 && c[0] < lists.across[i - 1][0] - 3);
     if (k > 0) lists.down = lists.across.splice(k);

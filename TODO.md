@@ -56,11 +56,14 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   boxed letters like 🅂🅀🅄🄰🅁🄴🅂, different each time the screen loads. The app's name stays Squares.
 - [ ] **Status-bar area above the header still grey on iPhone** – tried making the page's outer background white
   (20 Nov); needs checking on the phone and another approach if it's still grey.
-- [x] **Import from the Guardian** – + → *Guardian cryptic* lists recent cryptics (Guardian Content API); tapping one
-  imports grid, clues, linked answers, setter, number and date exactly. Already-imported ones open instead.
-  *(Built and tested against Guardian-format data only: the Guardian's hosts are blocked in Claude's sandbox,
-  so the live API needs checking on the phone.)*
-- [x] **Check answers** (puzzles with solutions, i.e. Guardian imports) – ⋯ → *Check this answer* / *Check all
+- [x] **Import from the Guardian** – the Guardian's API lists puzzles but doesn't include the crosswords, and its
+  pages block automated access, so imports use the print PDFs: + → *Guardian cryptic* lists recent cryptics
+  (puzzle numbers with an API key from open-platform.theguardian.com, else by date); tapping one opens its PDF
+  to save (Share → Save to Files), then *Import the PDF*. The grid comes from the PDF's drawing and the clues
+  are exact text. Guardian PDFs also print the previous puzzle's solution, which is added to that puzzle if
+  you have it (so Check answers works there).
+- [x] **Import any crossword PDF** – + → *Import a PDF*.
+- [x] **Check answers** (puzzles with solutions: Guardian puzzles once the next day's PDF is imported) – ⋯ → *Check this answer* / *Check all
   answers*: wrong letters turn red until changed. The timer stops only when everything is right.
 - [ ] *(Later)* More web sources.
 
