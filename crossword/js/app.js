@@ -1640,6 +1640,21 @@ async function solveView(p) {
 
 // ---------- boot ----------
 
+// The iPhone colours the strip behind the status bar from the theme colour, and doesn't follow a
+// light/dark switch by itself, so keep it equal to the header colour whenever the appearance changes.
+function syncThemeColor() {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const colour = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+  if (meta && colour) meta.setAttribute('content', colour);
+}
+syncThemeColor();
+const darkQuery = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+if (darkQuery) {
+  if (darkQuery.addEventListener) darkQuery.addEventListener('change', syncThemeColor);
+  else if (darkQuery.addListener) darkQuery.addListener(syncThemeColor);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncThemeColor(); });
+
 window.addEventListener('hashchange', route);
 route();
 
