@@ -33,8 +33,8 @@ export function numberGrid(rows, cols, blocks) {
 
 // A header is the word alone, or followed by ":" or straight away by a clue number.
 const HEADER = /^\s*(across|down)\s*(?:[:.\-]\s*)?(?=$|\d)(.*)$/i;
-// "12 Clue", "12. Clue", and linked clues such as "24,2-down Clue" or "1, 5 Clue".
-const CLUE = /^\s*(\d{1,3})((?:\s*,\s*\d{1,3}(?:\s*-?\s*(?:across|down|ac|dn|a|d)\b)?|\s*\.\s*\d{1,3}\s*-?\s*(?:across|down)\b|\s*,?\s+\d{1,3}\s*-\s*(?:across|down)\b)*)(?:\s*[.:)]\s*|\s+)(\S.*)$/i;
+// "12 Clue", "12. Clue", and linked clues such as "24,2-down Clue", "1, 5 Clue" or "1/13/24 Clue".
+const CLUE = /^\s*(\d{1,3})((?:\s*[,/]\s*\d{1,3}(?:\s*-?\s*(?:across|down|ac|dn|a|d)\b)?|\s*\.\s*\d{1,3}\s*-?\s*(?:across|down)\b|\s*,?\s+\d{1,3}\s*-\s*(?:across|down)\b)*)(?:\s*[.:)]\s*|\s+)(\S.*)$/i;
 const ENUM_END = /\(\s*\d[\d\s,.\-]*\)\s*$/;
 
 // Fix the commonest OCR confusions in a leading clue number ("l2" -> "12", "1O" -> "10").
@@ -83,11 +83,14 @@ export function parseClueText(text, defaultSection = 'across', useHeaders = true
       // No headings at all: a restart of the numbering means the Down list began.
       if (useHeaders && !hasHeaders && section === 'across' && n < prevNum) section = 'down';
       prevNum = n;
-      const links = m[2].replace(/^\s*[,.]?\s*/, '').replace(/\s*[,.]\s*/g, ', ').replace(/\s*-?\s*(across|down|ac|dn|a|d)\b/gi,
+      const links = m[2].replace(/^\s*[,./]?\s*/, '').replace(/\s*[,./]\s*/g, ', ').replace(/\s*-?\s*(across|down|ac|dn|a|d)\b/gi,
         (x, d) => '-' + (/^a/i.test(d) ? 'across' : 'down'));
       current = [n, (links ? `(with ${links}) ` : '') + m[3].trim()];
       out[section].push(current);
     } else if (current) {
+      // A clue ends with its (lengths), or is just "See 12": anything after that isn't part of it
+      // (e.g. a prize-puzzle footer below the last clue).
+      if (ENUM_END.test(current[1]) || /^see\s+\d{1,3}(\s*-?\s*(across|down))?$/i.test(current[1].trim())) { current = null; continue; }
       // Keep a line-end hyphen ("hold-" + "up" = "hold-up"): in clues it is usually real.
       current[1] = current[1].endsWith('-') ? current[1] + line : current[1] + ' ' + line;
     }

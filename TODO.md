@@ -64,6 +64,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   the sense related to "cross" (e.g. BRIDGE · *v.* to make or be a way across (a gap, river, etc.)). Small grey
   sans serif, left-aligned; every definition uses the word "cross".
 - [x] **Back up & restore moved into the + menu** (a smaller option beneath the others).
+- [x] **Multi-part clues written with slashes** (e.g. "1/13/24 …", "18/12 …", "See 18 Down") now link up;
+  text after a clue's (lengths), like a prize-puzzle footer, no longer gets stuck onto the last clue.
 
 ## Notes on how these work
 
