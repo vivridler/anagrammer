@@ -60,6 +60,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   the drawing, clues as exact text, filed by direction using the grid) or an image.
 - [x] ~~Guardian list and Check answers~~ – built, then removed (21 Nov): the Guardian's API doesn't include the
   crosswords, so it relied on opening and saving print PDFs, which was awkward; Add from Files covers it.
+- [x] **Dictionary entry under the header word** – part of speech, usage label where relevant, and a definition of
+  the sense related to "cross" (e.g. BRIDGE · *v.* to make or be a way across (a gap, river, etc.)).
 
 ## Notes on how these work
 
