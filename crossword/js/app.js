@@ -1,10 +1,9 @@
 import * as V from './vision.js';
 import * as P from './puzzle.js';
 import * as DB from './store.js';
-import { analyzeGrid, findCorners, readClueText, cluesFromOcr, scaledCanvas, textFromPdfItems, solutionFromPdf } from './importer.js';
+import { analyzeGrid, findCorners, readClueText, cluesFromOcr, scaledCanvas, textFromPdfItems } from './importer.js';
 import { readPdf } from './pdfimport.js';
 import { makeBackup, restoreBackup, saveFile } from './backup.js';
-import * as Guardian from './guardian.js';
 
 const app = document.getElementById('app');
 
@@ -438,47 +437,18 @@ function addMenu() {
   const s = sheet('New crossword', h('div', { class: 'menu' },
     h('button', { class: 'primary', onclick: async () => { s.close(); createFromImage(await filePicker({ capture: true })); } }, '📷  Take a photo'),
     h('button', { onclick: async () => { s.close(); createFromImage(await filePicker()); } }, '🖼  Choose an image'),
-    h('button', { onclick: async () => { s.close(); createFromPdf(await filePicker({ accept: 'application/pdf,.pdf' })); } }, '📄  Import a PDF'),
-    h('button', { onclick: () => { s.close(); guardianList(); } }, '📰  Guardian cryptic'),
+    h('button', { onclick: async () => { s.close(); addFromFile(await filePicker({ accept: 'application/pdf,.pdf,image/*' })); } }, '📄  Add from Files'),
     h('button', { onclick: () => { s.close(); createBlank(); } }, '▦  Blank grid')));
 }
 
-// Recent Guardian cryptics. The Guardian doesn't let apps download its crosswords, but each one
-// has a print PDF: tapping a puzzle opens that PDF to save, then + → Import a PDF reads it exactly.
-async function guardianList() {
-  const listEl = h('div', { class: 'glist' }, h('p', { class: 'hint' }, 'Loading recent cryptics…'));
-  const s = sheet('Guardian cryptic', h('div', { class: 'gwrap' },
-    h('p', { class: 'hint gsteps' }, 'Tap a puzzle to open its print PDF, then Share → Save to Files. Back here, tap ', h('b', {}, 'Import the PDF'), '.'),
-    listEl,
-    h('div', { class: 'toolbar flat pad' },
-      h('button', { class: 'primary', onclick: async () => { s.close(); createFromPdf(await filePicker({ accept: 'application/pdf,.pdf' })); } }, '📄 Import the PDF'),
-      h('span', { class: 'grow' }),
-      h('button', { class: 'small', onclick: () => {
-        const k = prompt('Guardian API key (from open-platform.theguardian.com), used to list puzzle numbers. Leave empty to list by date only.', Guardian.apiKey() || '');
-        if (k !== null) { Guardian.setApiKey(k.trim()); s.close(); guardianList(); }
-      } }, '⚙︎ API key'))), { tall: true });
-  const mine = await DB.listPuzzles();
-  const have = new Map(mine.filter(x => x.meta && /guardian/i.test(x.meta.source || '') && x.meta.number).map(x => [String(x.meta.number), x]));
-  const haveByDate = new Map(mine.filter(x => x.meta && /guardian/i.test(x.meta.source || '')).map(x => [x.meta.date, x]));
-  let items;
-  try { items = await Guardian.recentPuzzles('cryptic'); }
-  catch { items = Guardian.recentDates(); } // no key / no answer: list by date
-  listEl.replaceChildren(h('ul', { class: 'library' }, items.map(it => {
-    const existing = (it.number && have.get(String(it.number))) || (!it.number && haveByDate.get(it.day));
-    return h('li', {
-      onclick: () => {
-        if (existing) { s.close(); go(`#/p/${existing.id}/solve`); return; }
-        window.open(Guardian.pdfUrl(it.day), '_blank', 'noopener');
-      },
-    },
-      h('div', { class: 'row1' },
-        h('span', { class: 'title' }, it.number ? `Cryptic No ${Number(it.number).toLocaleString('en-GB')}` : 'Cryptic'),
-        h('span', { class: 'date' }, fmtDay(it.day))),
-      existing ? h('div', { class: 'sub' }, '✓ In your puzzles — ' + statusLine(existing)) : null);
-  })));
+// Files: PDFs are read exactly; images go through the photo pipeline.
+function addFromFile(file) {
+  if (!file) return;
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) createFromPdf(file);
+  else createFromImage(file);
 }
 
-// A crossword PDF (e.g. a Guardian print version): grid from the drawing, clues as exact text.
+// A crossword PDF (e.g. a newspaper's print version): grid from the drawing, clues as exact text.
 async function createFromPdf(file) {
   if (!file) return;
   const done = busy('Reading the PDF…');
@@ -504,9 +474,8 @@ async function createFromPdf(file) {
     // Already imported? Open it instead of making a copy.
     const all = await DB.listPuzzles();
     const dup = meta.number && all.find(x => x.meta && x.meta.number === meta.number && (x.meta.source || '') === meta.source);
-    const extra = applyPrintedSolution(canvas, items, all);
     if (dup) {
-      toast(`You already have ${displayTitle(dup)}; opening it.` + (await extra), 4000);
+      toast(`You already have ${displayTitle(dup)}; opening it.`, 4000);
       go(`#/p/${dup.id}/solve`);
       return;
     }
@@ -519,8 +488,6 @@ async function createFromPdf(file) {
     resetFill(p);
     cache.set(p.id, p);
     await DB.savePuzzle(p);
-    const note = await extra;
-    if (note) toast(note.trim(), 4500);
     go(`#/p/${p.id}/solve`);
   } catch (err) {
     console.error(err);
@@ -528,31 +495,6 @@ async function createFromPdf(file) {
   } finally {
     done();
   }
-}
-
-// Guardian PDFs print the previous puzzle's solution: if you have that puzzle, give it the answers
-// so Check answers works there. Resolves to a short note for the user ('' if nothing was done).
-async function applyPrintedSolution(canvas, items, all) {
-  const head = items.find(it => /^\s*solution\b/i.test(it.str));
-  if (!head) return '';
-  // "Solution No. 30,168" may be split over several text pieces on the same line.
-  const hgt = head.y1 - head.y0;
-  const headLine = items.filter(it => Math.abs((it.y0 + it.y1) / 2 - (head.y0 + head.y1) / 2) < hgt * 0.6 && it.x0 >= head.x0 - hgt)
-    .sort((a, b) => a.x0 - b.x0).map(it => it.str).join(' ');
-  const m = headLine.match(/(\d{1,3}(?:,\d{3})+|\d{2,6})/);
-  if (!m) return '';
-  const number = m[1].replace(/,/g, '');
-  const target = all.find(x => x.meta && /guardian/i.test(x.meta.source || '') && String(x.meta.number) === number);
-  if (!target || target.solution) return '';
-  const sol = solutionFromPdf(canvas, items, target.rows, target.cols);
-  if (!sol) return '';
-  // Only accept it if it fits the grid exactly: a letter in every white square, none in black ones.
-  const fits = sol.letters.every((v, i) => (target.blocks[i] ? !v : !!v));
-  if (!fits) return '';
-  const p = cache.get(target.id) || target;
-  p.solution = sol.letters;
-  await DB.savePuzzle(p);
-  return ` Answers added for ${displayTitle(p)}: Check answers now works there.`;
 }
 
 // Back up / restore all puzzles (moving them between Safari and the home-screen app on iPhone).
@@ -1253,7 +1195,6 @@ async function solveView(p) {
       c.classList.toggle('sel', i === sel);
       c.classList.toggle('word', inWord.has(i) && i !== sel);
       c.classList.toggle('pencil', !!(p.fill[i] && p.pencil[i]));
-      c.classList.toggle('wrong', !!(p.wrong && p.wrong[i] && p.fill[i]));
       c.letter.textContent = p.fill[i] || '';
     }
     if (w) {
@@ -1276,36 +1217,17 @@ async function solveView(p) {
     p.cursor = { i: sel, dir };
   }
 
-  // With the answers known (Guardian imports), finished means every square is right.
-  const isSolved = () => p.solution && p.fill.every((v, i) => p.blocks[i] || v === p.solution[i]);
   function changed() {
     saveSoon(p);
     if (anyRefs) renderList();
     update();
-    if (p.completedTime != null || !isComplete()) return;
-    if (p.solution && !isSolved()) {
-      if (!p.fullWarned) { p.fullWarned = true; toast('Every square is filled, but some are wrong. ⋯ → Check all answers.', 4500); }
-      return;
+    if (p.completedTime == null && isComplete()) {
+      stopTimer();
+      p.completedTime = p.timeMs;
+      renderTimer();
+      saveSoon(p);
+      toast(`🎉 Finished in ${fmtTime(p.completedTime)}!`, 4000);
     }
-    stopTimer();
-    p.completedTime = p.timeMs;
-    renderTimer();
-    saveSoon(p);
-    toast(`🎉 ${p.solution ? 'Solved' : 'Finished'} in ${fmtTime(p.completedTime)}!`, 4000);
-  }
-  // Mark wrong letters (red until changed). Empty squares aren't counted.
-  function checkCells(cellList) {
-    if (!p.wrong || p.wrong.length !== N) p.wrong = new Array(N).fill(false);
-    let wrong = 0, filled = 0;
-    for (const i of cellList) {
-      if (!p.fill[i]) continue;
-      filled++;
-      p.wrong[i] = p.fill[i] !== p.solution[i];
-      if (p.wrong[i]) wrong++;
-    }
-    saveSoon(p);
-    update();
-    toast(!filled ? 'Nothing to check yet.' : wrong ? `${wrong} wrong square${wrong === 1 ? '' : 's'} (in red).` : 'All correct so far ✓', 3000);
   }
 
   // Timer: counts while the puzzle is on screen, from first opening until every square is filled.
@@ -1378,7 +1300,6 @@ async function solveView(p) {
     if (target) { dir = target[0].dir; sel = target[1]; update(); } else selectWord(next, false);
   }
   function type(ch) {
-    if (p.wrong) p.wrong[sel] = false;
     p.fill[sel] = ch;
     p.pencil[sel] = !!p.pencilMode;
     const w = wordOf(sel, dir);
@@ -1403,7 +1324,6 @@ async function solveView(p) {
       else if (prevPart) { dir = prevPart.dir; sel = prevPart.cells[prevPart.cells.length - 1]; p.fill[sel] = ''; }
     }
     p.pencil[sel] = false;
-    if (p.wrong) p.wrong[sel] = false;
     changed();
   }
   function move(dr, dc) {
@@ -1522,12 +1442,6 @@ async function solveView(p) {
     const s = sheet('Puzzle', h('div', { class: 'menu' },
       h('button', { onclick: () => { s.close(); editClue(); } }, '✎  Edit this clue'),
       p.image ? h('button', { onclick: () => { s.close(); showPhoto(); } }, '🖼  Show photo') : null,
-      p.solution ? h('button', { onclick: () => {
-        s.close();
-        const w = wordOf(sel, dir);
-        if (w) checkCells(groupWords(w).flatMap(x => x.cells));
-      } }, '✔︎  Check this answer') : null,
-      p.solution ? h('button', { onclick: () => { s.close(); checkCells(p.fill.map((_, i) => i).filter(i => !p.blocks[i])); } }, '✔︎  Check all answers') : null,
       h('button', { onclick: () => { s.close(); anagram(); } }, '🔀  Anagram helper'),
       h('button', { onclick: () => go(`#/p/${p.id}/clues`) }, '✏️  Edit clues'),
       h('button', { onclick: () => go(`#/p/${p.id}/${p.image ? 'corners' : 'grid'}`) }, '▦  Fix grid'),
@@ -1539,7 +1453,7 @@ async function solveView(p) {
       h('button', { onclick: () => {
         if (!confirm('Clear all your answers and reset the timer?')) return;
         stopTimer();
-        resetFill(p); p.pencil = new Array(N).fill(false); p.wrong = null; p.fullWarned = false;
+        resetFill(p); p.pencil = new Array(N).fill(false);
         p.timeMs = 0; p.completedTime = null;
         startTimer(); renderTimer(); changed(); s.close();
       } }, '🧹  Clear answers'),

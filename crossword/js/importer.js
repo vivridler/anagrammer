@@ -76,7 +76,8 @@ function inPolygon(x, y, pts) {
   }
   return inside;
 }
-// The "Solution No. 30,168" heading and the small solution grid below it (Guardian print PDFs).
+// The "Solution No. 30,168" heading and the small solution grid below it (Guardian print PDFs),
+// which is left out of the clue text.
 function solutionArea(items, canvas) {
   const head = items.find(it => /^\s*solution\b/i.test(it.str));
   if (!head) return null;
@@ -129,42 +130,4 @@ export function textFromPdfItems(canvas, items, corners) {
   const rest = keep.filter(it => !used.has(it));
   if (rest.length) out.push(...linesOf(rest));
   return out.join('\n');
-}
-
-// The previous puzzle's solution printed on Guardian PDFs: { number, letters[] (row-major, '' for blocks) }
-// sized rows x cols. Returns null if it can't be read cleanly.
-export function solutionFromPdf(canvas, items, rows, cols) {
-  const sol = solutionArea(items, canvas);
-  if (!sol) return null;
-  const m = sol.head.str.match(/(\d{1,3}(?:,\d{3})+|\d{2,6})/) ||
-    (items.find(it => it !== sol.head && Math.abs(it.y0 - sol.head.y0) < 4 && /\d/.test(it.str)) || { str: '' }).str.match(/(\d{1,3}(?:,\d{3})+|\d{2,6})/);
-  if (!m) return null;
-  const number = m[1].replace(/,/g, '');
-  // Find the small grid's outline in the area below the heading.
-  const x0 = Math.max(0, Math.floor(sol.x0)), y0 = Math.floor(sol.head.y1);
-  const w = Math.min(canvas.width, Math.ceil(sol.x1)) - x0, h = Math.min(canvas.height, Math.ceil(sol.y1)) - y0;
-  if (w < 20 || h < 20) return null;
-  const crop = document.createElement('canvas');
-  crop.width = w; crop.height = h;
-  crop.getContext('2d').drawImage(canvas, x0, y0, w, h, 0, 0, w, h);
-  const gc = V.detectGridCorners(grayOf(crop)).map(([x, y]) => [x + x0, y + y0]);
-  const gx0 = Math.min(gc[0][0], gc[3][0]), gx1 = Math.max(gc[1][0], gc[2][0]);
-  const gy0 = Math.min(gc[0][1], gc[1][1]), gy1 = Math.max(gc[2][1], gc[3][1]);
-  const cw = (gx1 - gx0) / cols, ch = (gy1 - gy0) / rows;
-  const letters = new Array(rows * cols).fill('');
-  for (const it of items) {
-    if (it === sol.head) continue;
-    const str = it.str.replace(/\s+/g, '');
-    if (!/^[A-Za-z]+$/.test(str)) continue;
-    const [cx0, cy] = [it.x0, centre(it)[1]];
-    if (cy < gy0 || cy > gy1 || it.x1 < gx0 || cx0 > gx1) continue;
-    // An item may hold several letters in a row; spread them over its width.
-    const step = (it.x1 - it.x0) / str.length;
-    [...str].forEach((ch2, k) => {
-      const x = cx0 + step * (k + 0.5);
-      const c = Math.floor((x - gx0) / cw), r = Math.floor((cy - gy0) / ch);
-      if (r >= 0 && c >= 0 && r < rows && c < cols) letters[r * cols + c] = ch2.toUpperCase();
-    });
-  }
-  return { number, letters };
 }
