@@ -68,7 +68,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   text after a clue's (lengths), like a prize-puzzle footer, no longer gets stuck onto the last clue.
 - [x] **Filter puzzles by complete / incomplete** – a chip next to the sort chips; each tap steps All → Incomplete →
   Complete; remembered; complete = every square filled. Sort by Number removed so it all fits on one line.
-- [x] **Black square after the header word** – sized to match the boxed letters as drawn on the device.
+- [x] **Black square after the header word** – the word is now drawn as a row of crossword squares (instead of boxed
+  Unicode letters, which iPhone draws in its own style), ending in a matching black square.
 
 ## Notes on how these work
 

@@ -421,24 +421,6 @@ const CROSS_WORDS = [
   ['TRIAL', 'n.', '', 'a source of annoyance or hardship; a cross to bear.'],
   ['TRAVAIL', 'n.', 'literary', 'painful or laborious effort; a cross to bear.'],
 ].map(([word, pos, label, def]) => ({ word, pos, label, def }));
-// Size the black square to match the drawn outline of a boxed letter in the font the device actually
-// uses (iPhone draws these glyphs smaller than other systems).
-function sizeBlock(wordEl, blockEl) {
-  const cs = getComputedStyle(wordEl);
-  const ctx = document.createElement('canvas').getContext('2d');
-  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-  const m = ctx.measureText(String.fromCodePoint(0x1F130)); // 🄰
-  const left = m.actualBoundingBoxLeft || 0, right = m.actualBoundingBoxRight || m.width;
-  const w = left + right, ht = (m.actualBoundingBoxAscent || 0) + (m.actualBoundingBoxDescent || 0);
-  const box = Math.max(4, Math.round(Math.min(w, ht || w)));
-  const spacing = parseFloat(cs.letterSpacing) || 0;
-  Object.assign(blockEl.style, {
-    width: box + 'px', height: box + 'px',
-    marginLeft: Math.max(0, Math.round((m.width - w) / 2 + spacing)) + 'px',
-    verticalAlign: -Math.round(m.actualBoundingBoxDescent || 0) + 'px',
-    borderRadius: Math.max(1, Math.round(box * 0.12)) + 'px',
-  });
-}
 const boxed = word => [...word].map(ch => String.fromCodePoint(0x1F130 + ch.charCodeAt(0) - 65)).join('');
 function crossWord() {
   const last = store.get('squares.lastHeader', '');
@@ -655,9 +637,10 @@ async function homeView() {
   h1.classList.add('brand');
   // The boxed word, with its dictionary entry underneath.
   const e = headerWord;
-  // The word, then a black square like the end of a crossword entry.
-  const blockEl = h('span', { class: 'brand-block' });
-  const wordEl = h('span', { class: 'brand-word', 'aria-hidden': 'true' }, boxed(e.word), blockEl);
+  // The word as a row of crossword squares, ending in a black square. Drawn with CSS rather than the
+  // boxed Unicode letters, so the squares match each other and look the same on every device.
+  const wordEl = h('span', { class: 'brand-word', 'aria-hidden': 'true' },
+    [...e.word].map(ch => h('span', { class: 'tile' }, ch)), h('span', { class: 'tile block' }));
   const defEl = h('span', { class: 'brand-def' },
       h('i', { class: 'pos' }, e.pos), ' ',
       e.label ? h('span', { class: 'label' }, e.label + ' ') : null,
@@ -666,11 +649,10 @@ async function homeView() {
   h1.setAttribute('aria-label', `${e.word.toLowerCase()}, ${e.pos === 'adj.' ? 'adjective' : e.pos === 'v.' ? 'verb' : 'noun'}: ${e.def}`);
   // Big, but shrink a long word until it fits beside the menu button.
   requestAnimationFrame(() => {
-    let size = parseFloat(getComputedStyle(wordEl).fontSize);
-    sizeBlock(wordEl, blockEl);
-    while (wordEl.scrollWidth > wordEl.clientWidth && size > 16) {
-      size -= 1; wordEl.style.fontSize = size + 'px'; sizeBlock(wordEl, blockEl);
-    }
+    // Square size: up to 40px, smaller when the word (plus its black square) needs the room.
+    const n = e.word.length + 1;
+    const fit = Math.floor(wordEl.clientWidth / (n + (n - 1) * 0.14));
+    wordEl.style.setProperty('--t', Math.max(16, Math.min(40, fit)) + 'px');
   });
 }
 
