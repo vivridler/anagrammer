@@ -45,7 +45,7 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   lengths, e.g. 24-down (3,2) shows as "[ARC UP]", not "[ARCUP]"; hyphens are kept.
 - [x] **Puzzle library** – each puzzle has a source, setter, number and publishing date (⋯ → *Details*; setter
   and number guessed from the page heading, source carried over from the last puzzle, date = import day).
-  Sorted by publishing date by default, or by source, setter or number. Grid previews removed; shows % filled,
+  Sorted by publishing date by default, or by source or setter. Grid previews removed; shows % filled,
   time spent and the first clue. New puzzles via a + button at the bottom right.
 - [x] **Rename the app to Squares** with a placeholder icon: white squircle, black outline, "42" top right.
 - [x] **Back up & restore** – ⋯ on the puzzles screen saves all puzzles to a file and restores them. On iPhone,
@@ -66,8 +66,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] **Back up & restore moved into the + menu** (a smaller option beneath the others).
 - [x] **Multi-part clues written with slashes** (e.g. "1/13/24 …", "18/12 …", "See 18 Down") now link up;
   text after a clue's (lengths), like a prize-puzzle footer, no longer gets stuck onto the last clue.
-- [x] **Filter puzzles by complete / incomplete** – a picker next to the sort chips (All / Incomplete / Complete);
-  remembered; complete = every square filled.
+- [x] **Filter puzzles by complete / incomplete** – a chip next to the sort chips; each tap steps All → Incomplete →
+  Complete; remembered; complete = every square filled. Sort by Number removed so it all fits on one line.
 
 ## Notes on how these work
 

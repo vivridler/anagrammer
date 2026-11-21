@@ -423,17 +423,11 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
 /* ---- + menu: back up & restore as a smaller option beneath the others ---- */
 .menu .menu-minor { align-self: center; margin-top: 4px; min-height: 36px; padding: 6px 12px; font-size: 14px; color: var(--muted); background: transparent; border: 0; }
 
-/* ---- complete / incomplete filter ---- */
-/* Sort chips and the filter share a row when they fit; on narrow phones the filter drops to the right of a
-   second line rather than scrolling off-screen. */
+/* ---- complete / incomplete filter: one chip that steps through the options ---- */
+/* If the row is ever too narrow, the chip drops to the right of a second line instead of scrolling off. */
 .sortbar { flex-wrap: wrap; overflow-x: visible; row-gap: 8px; }
 .sort-sep { display: none; }
-select.chip.filter { margin-left: auto; }
-select.chip.filter {
-  -webkit-appearance: none; appearance: none; font: inherit; font-size: 14px; color: var(--text);
-  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;
-  border: 1px solid var(--line); padding: 4px 26px 4px 12px; min-height: 32px; border-radius: 999px; flex: none;
-}
-select.chip.filter.on { background-color: var(--accent); border-color: var(--accent); color: var(--accent-text);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E"); }
+.chip.filter { margin-left: auto; }
 .filter-empty { text-align: center; margin-top: 24px; }
+.sortbar { gap: 5px; }
+.sortbar .chip { padding: 4px 10px; }

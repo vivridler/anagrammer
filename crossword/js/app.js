@@ -379,7 +379,7 @@ async function createBlank() {
   go(`#/p/${p.id}/grid`);
 }
 
-const SORTS = { date: 'Date', source: 'Source', setter: 'Setter', number: 'Number' };
+const SORTS = { date: 'Date', source: 'Source', setter: 'Setter' };
 
 // Header: a random synonym of "cross", in boxed letters (🄰–🅉), different each time the screen loads.
 // Each with a dictionary-style entry for the sense that relates to "cross" (every definition uses the word).
@@ -436,7 +436,6 @@ function sortPuzzles(list, key, dir) {
     date: byDate,
     source: (a, b) => metaOf(a).source.localeCompare(metaOf(b).source, undefined, { sensitivity: 'base' }),
     setter: (a, b) => metaOf(a).setter.localeCompare(metaOf(b).setter, undefined, { sensitivity: 'base' }),
-    number: (a, b) => (parseInt(metaOf(b).number, 10) || 0) - (parseInt(metaOf(a).number, 10) || 0),
   }[key];
   const empty = p => key !== 'date' && !metaOf(p)[key];
   return [...list].sort((a, b) => {
@@ -585,13 +584,17 @@ async function homeView() {
   let filter = store.get('squares.filter', 'all');
   if (!FILTERS[filter]) filter = 'all';
   const isDone = p => p.completedTime != null;
-  const filterEl = h('select', {
-    class: 'chip filter' + (filter !== 'all' ? ' on' : ''), 'aria-label': 'Show puzzles',
-    onchange: e => { filter = e.target.value; store.set('squares.filter', filter); render(); },
-  }, Object.entries(FILTERS).map(([k, label]) => h('option', { value: k, selected: k === filter }, label)));
+  // A single chip: each tap moves to the next option (All → Incomplete → Complete → All).
+  const order = Object.keys(FILTERS);
+  const filterEl = h('button', {
+    class: 'chip filter',
+    onclick: () => { filter = order[(order.indexOf(filter) + 1) % order.length]; store.set('squares.filter', filter); render(); },
+  });
 
   function render() {
     filterEl.className = 'chip filter' + (filter !== 'all' ? ' on' : '');
+    filterEl.textContent = FILTERS[filter];
+    filterEl.setAttribute('aria-label', `Showing ${FILTERS[filter].toLowerCase()} puzzles. Tap to change.`);
     chips.replaceChildren(h('span', { class: 'sort-label' }, 'Sort'), ...Object.entries(SORTS).map(([k, label]) =>
       h('button', {
         class: 'chip' + (k === key ? ' on' : ''), 'aria-pressed': k === key ? 'true' : 'false',
