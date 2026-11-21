@@ -469,3 +469,8 @@ html, body { overflow: hidden; overscroll-behavior: none; }
 body { position: fixed; inset: 0; width: 100%; }
 #app { height: 100%; }
 .scroll { overscroll-behavior: contain; }
+
+/* ---- status-bar strip: iPhone fills the area behind the clock/battery with the body's colour, so the
+   body takes the header colour and the app area keeps the page background. ---- */
+body { background: var(--surface); }
+#app { background: var(--bg); }
