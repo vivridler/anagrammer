@@ -75,7 +75,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   (non-pencil) letters count; changing a completed answer re-times it. Recorded from 21 Nov onwards.
 - [ ] **First/last in on the puzzle list** – show something of the above for finished puzzles in the list (to be
   decided; the data is already stored with each finished puzzle).
-- [ ] **Header text colour in dark mode** – the header word and definition need checking/fixing in dark mode.
+- [x] **Header text colour in dark mode** – white outlines and letters on the squares, and a white outline around the
+  trailing black square.
 - [ ] **Search** – a search bar on the puzzles screen that searches the full text of clues and answers.
 - [ ] **Redesigned finished screen** – a new design for the panel shown when a puzzle is finished. *(Details to
   be agreed.)*
