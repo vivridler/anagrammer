@@ -471,7 +471,8 @@ function addMenu() {
     h('button', { class: 'primary', onclick: async () => { s.close(); createFromImage(await filePicker({ capture: true })); } }, '📷  Take a photo'),
     h('button', { onclick: async () => { s.close(); createFromImage(await filePicker()); } }, '🖼  Choose an image'),
     h('button', { onclick: async () => { s.close(); addFromFile(await filePicker({ accept: 'application/pdf,.pdf,image/*' })); } }, '📄  Add from Files'),
-    h('button', { onclick: () => { s.close(); createBlank(); } }, '▦  Blank grid')));
+    h('button', { onclick: () => { s.close(); createBlank(); } }, '▦  Blank grid'),
+    h('button', { class: 'menu-minor', onclick: () => { s.close(); backupMenu(); } }, 'Back up & restore…')));
 }
 
 // Files: PDFs are read exactly; images go through the photo pipeline.
@@ -603,7 +604,7 @@ async function homeView() {
   render();
 
   app.replaceChildren(
-    header(boxed(headerWord.word), { actions: [h('button', { class: 'icon', 'aria-label': 'Back up and restore', onclick: backupMenu }, '⋯')] }),
+    header(boxed(headerWord.word)),
     h('main', { class: 'scroll pad home' },
       all.length ? chips : null,
       all.length ? listEl : h('div', { class: 'empty' },
@@ -618,16 +619,18 @@ async function homeView() {
   // The boxed word, with its dictionary entry underneath.
   const e = headerWord;
   const wordEl = h('span', { class: 'brand-word', 'aria-hidden': 'true' }, boxed(e.word));
-  h1.replaceChildren(wordEl,
-    h('span', { class: 'brand-def' },
+  const defEl = h('span', { class: 'brand-def' },
       h('i', { class: 'pos' }, e.pos), ' ',
       e.label ? h('span', { class: 'label' }, e.label + ' ') : null,
-      e.def));
+      e.def);
+  h1.replaceChildren(wordEl, defEl);
   h1.setAttribute('aria-label', `${e.word.toLowerCase()}, ${e.pos === 'adj.' ? 'adjective' : e.pos === 'v.' ? 'verb' : 'noun'}: ${e.def}`);
   // Big, but shrink a long word until it fits beside the menu button.
   requestAnimationFrame(() => {
     let size = parseFloat(getComputedStyle(wordEl).fontSize);
     while (wordEl.scrollWidth > wordEl.clientWidth && size > 16) { size -= 1; wordEl.style.fontSize = size + 'px'; }
+    // Start the definition under the word's second letter.
+    defEl.style.paddingLeft = Math.round(wordEl.scrollWidth / e.word.length) + 'px';
   });
 }
 

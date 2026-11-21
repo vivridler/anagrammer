@@ -61,7 +61,9 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] ~~Guardian list and Check answers~~ – built, then removed (21 Nov): the Guardian's API doesn't include the
   crosswords, so it relied on opening and saving print PDFs, which was awkward; Add from Files covers it.
 - [x] **Dictionary entry under the header word** – part of speech, usage label where relevant, and a definition of
-  the sense related to "cross" (e.g. BRIDGE · *v.* to make or be a way across (a gap, river, etc.)).
+  the sense related to "cross" (e.g. BRIDGE · *v.* to make or be a way across (a gap, river, etc.)). Small grey
+  sans serif, indented to start under the word's second letter.
+- [x] **Back up & restore moved into the + menu** (a smaller option beneath the others).
 
 ## Notes on how these work
 
