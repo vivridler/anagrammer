@@ -84,6 +84,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] **Header fixed in place** – the page itself no longer scrolls or bounces; only the list/content areas do.
   *(iPhone rubber-banding can't be fully reproduced in the emulator; check on the phone.)*
 - [x] **Letter count after the header definition**, crossword-style, e.g. "slightly angry; cross (7)".
+- [x] **New icon** – the squircle outline divided into four quadrants: bottom-right black, a "1" in the top-left
+  corner of the top-left quadrant, like a tiny crossword.
 
 ## Notes on how these work
 
