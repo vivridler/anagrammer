@@ -456,3 +456,9 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
 .fin-clue { font-size: 16px; line-height: 1.35; }
 .fin-clue b { margin-right: 4px; }
 .fin-answer { margin-top: 6px; font-size: 20px; font-weight: 700; letter-spacing: .08em; }
+
+/* ---- header squares in dark mode: white outlines (also around the trailing black square) ---- */
+@media (prefers-color-scheme: dark) {
+  .brand-word .tile { border-color: #f3f4f6; color: #f3f4f6; background: var(--surface); }
+  .brand-word .tile.block { background: #000; border-color: #f3f4f6; }
+}
