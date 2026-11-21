@@ -6,6 +6,8 @@ import { readPdf } from './pdfimport.js';
 import { makeBackup, restoreBackup, saveFile } from './backup.js';
 
 const app = document.getElementById('app');
+// Replace the screen's content; optional parts passed as null/false are skipped (not shown as "null").
+const setApp = (...kids) => app.replaceChildren(...kids.flat().filter(k => k != null && k !== false));
 
 // ---------- small helpers ----------
 
@@ -309,7 +311,7 @@ async function route() {
     }
   } catch (err) {
     console.error(err);
-    app.replaceChildren(header('Something went wrong', { back: '#/' }),
+    setApp(header('Something went wrong', { back: '#/' }),
       h('div', { class: 'pad' }, h('p', {}, String(err.message || err))));
   }
 }
@@ -622,7 +624,7 @@ async function homeView() {
   }
   render();
 
-  app.replaceChildren(
+  setApp(
     header(boxed(headerWord.word)),
     h('main', { class: 'scroll pad home' },
       all.length ? chips : null,
@@ -644,9 +646,10 @@ async function homeView() {
   const defEl = h('span', { class: 'brand-def' },
       h('i', { class: 'pos' }, e.pos), ' ',
       e.label ? h('span', { class: 'label' }, e.label + ' ') : null,
-      e.def);
+      // Crossword style: the definition followed by the letter count, e.g. "slightly angry; cross (7)".
+      `${e.def.replace(/\.$/, '')} (${e.word.length})`);
   h1.replaceChildren(wordEl, defEl);
-  h1.setAttribute('aria-label', `${e.word.toLowerCase()}, ${e.pos === 'adj.' ? 'adjective' : e.pos === 'v.' ? 'verb' : 'noun'}: ${e.def}`);
+  h1.setAttribute('aria-label', `${e.word.toLowerCase()}, ${e.pos === 'adj.' ? 'adjective' : e.pos === 'v.' ? 'verb' : 'noun'}: ${e.def} ${e.word.length} letters.`);
   // Big, but shrink a long word until it fits beside the menu button.
   requestAnimationFrame(() => {
     // Square size: up to 34px, smaller when the word (plus its black square) needs the room.
@@ -760,7 +763,7 @@ async function cornersView(p) {
     route();
   }
 
-  app.replaceChildren(
+  setApp(
     header('Fix grid: corners', { back: `#/p/${p.id}/solve` }),
     h('p', { class: 'hint' }, 'Drag the four circles onto the outer corners of the crossword grid.'),
     stage,
@@ -878,7 +881,7 @@ async function gridView(p) {
     return b;
   };
 
-  app.replaceChildren(
+  setApp(
     header(p.image ? 'Fix grid: squares' : 'Edit grid', { back: p.image ? `#/p/${p.id}/corners` : `#/p/${p.id}/solve` }),
     h('p', { class: 'hint' }, p.image
       ? 'The red lines should sit on the grid lines (if not, go back and move the corners). Tap a square to switch it between black and white.'
@@ -1047,7 +1050,7 @@ async function cluesView(p) {
   };
 
   const photos = [p.image, p.clueImage].filter(Boolean);
-  app.replaceChildren(
+  setApp(
     header('Edit clues', {
       back: `#/p/${p.id}/solve`,
       actions: [h('button', { class: 'small primary', onclick: () => go(`#/p/${p.id}/solve`) }, 'Done')],
@@ -1622,7 +1625,7 @@ async function solveView(p) {
   document.body.classList.add('solving');
   onCleanup(() => document.body.classList.remove('solving'));
 
-  app.replaceChildren(h('div', { class: 'solve' },
+  setApp(h('div', { class: 'solve' },
     bar,
     h('div', { class: 'solve-main' }, gridWrap, clueList),
     clueBar, keyboard));

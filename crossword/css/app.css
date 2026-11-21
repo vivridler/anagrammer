@@ -473,4 +473,7 @@ body { position: fixed; inset: 0; width: 100%; }
 /* ---- status-bar strip: iPhone fills the area behind the clock/battery with the body's colour, so the
    body takes the header colour and the app area keeps the page background. ---- */
 body { background: var(--surface); }
-#app { background: var(--bg); }
+/* The app area also takes the header colour, in case the strip behind the status bar belongs to it;
+   the content areas below the header get the page background explicitly. */
+#app { background: var(--surface); }
+#app > main, .solve-main, .xw-wrap, .stage + .toolbar, main.scroll { background: var(--bg); }

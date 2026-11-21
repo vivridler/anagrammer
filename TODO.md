@@ -54,8 +54,9 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] **First clue shown in full** on the puzzles screen (wraps instead of being cut off).
 - [x] **Header word** – the puzzles screen's header shows a random synonym of "cross" (ANGRY, TRAVERSE, ROOD…) in
   boxed letters like 🅂🅀🅄🄰🅁🄴🅂, different each time the screen loads. The app's name stays Squares.
-- [x] **Status-bar area above the header still grey on iPhone** – the iPhone fills it with the body's colour, so the
-  body now takes the header colour (white / dark) and the app area keeps the page background (21 Nov).
+- [ ] **Status-bar area above the header still a different colour on iPhone** – tried: outer page background white
+  (20 Nov), body in the header colour (21 Nov, no change), app area in the header colour with content areas in
+  the page colour (21 Nov, to check). If still different, the iPhone is painting it itself.
 - [x] **Add from Files** – + → *Add from Files* takes a crossword PDF (e.g. a newspaper's print version: grid from
   the drawing, clues as exact text, filed by direction using the grid) or an image.
 - [x] ~~Guardian list and Check answers~~ – built, then removed (21 Nov): the Guardian's API doesn't include the
@@ -82,6 +83,7 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   be agreed.)*
 - [x] **Header fixed in place** – the page itself no longer scrolls or bounces; only the list/content areas do.
   *(iPhone rubber-banding can't be fully reproduced in the emulator; check on the phone.)*
+- [x] **Letter count after the header definition**, crossword-style, e.g. "slightly angry; cross (7)".
 
 ## Notes on how these work
 
