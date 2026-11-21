@@ -413,8 +413,7 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
 /* ---- header word's dictionary entry ---- */
 .bar.home-bar h1.brand { display: flex; flex-direction: column; gap: 0; white-space: normal; overflow: visible; min-width: 0; }
 .bar.home-bar .brand-word { font-size: 36px; line-height: 1.25; letter-spacing: .04em; white-space: nowrap; overflow: hidden; }
-/* Same sans serif as the rest of the app, all in grey, indented to start under the word's second letter
-   (the indent is set in app.js from the rendered letter width). */
+/* Same sans serif as the rest of the app, all in grey, left-aligned with the word. */
 .bar.home-bar .brand-def {
   font: 400 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: 0;
   color: var(--muted); padding-right: 8px; margin-top: 2px;

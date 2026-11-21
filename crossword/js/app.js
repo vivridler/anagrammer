@@ -382,44 +382,44 @@ async function createBlank() {
 const SORTS = { date: 'Date', source: 'Source', setter: 'Setter', number: 'Number' };
 
 // Header: a random synonym of "cross", in boxed letters (🄰–🅉), different each time the screen loads.
-// Each with a dictionary-style entry for the sense that relates to "cross".
+// Each with a dictionary-style entry for the sense that relates to "cross" (every definition uses the word).
 const CROSS_WORDS = [
-  ['ANGRY', 'adj.', '', 'feeling or showing strong annoyance or hostility.'],
-  ['IRATE', 'adj.', '', 'feeling or showing great anger.'],
-  ['VEXED', 'adj.', '', 'annoyed, frustrated or worried.'],
-  ['IRKED', 'adj.', '', 'irritated; annoyed.'],
-  ['TESTY', 'adj.', '', 'easily irritated; impatient and somewhat bad-tempered.'],
-  ['TETCHY', 'adj.', '', 'bad-tempered and irritable.'],
-  ['CRABBY', 'adj.', 'informal', 'irritable; ill-humoured.'],
-  ['GRUMPY', 'adj.', '', 'bad-tempered and sulky.'],
-  ['CRANKY', 'adj.', 'informal', 'ill-tempered; irritable.'],
-  ['PEEVED', 'adj.', 'informal', 'annoyed; irritated.'],
-  ['MIFFED', 'adj.', 'informal', 'slightly put out; annoyed.'],
-  ['NARKED', 'adj.', 'Brit. & Aus. informal', 'annoyed; irritated.'],
-  ['SHIRTY', 'adj.', 'Brit. informal', 'bad-tempered or annoyed.'],
-  ['STROPPY', 'adj.', 'Brit. informal', 'bad-tempered and argumentative.'],
-  ['RATTY', 'adj.', 'informal', 'irritable; bad-tempered.'],
-  ['HUFFY', 'adj.', '', 'easily offended; sulky.'],
-  ['SNAPPY', 'adj.', '', 'irritable and inclined to speak sharply.'],
-  ['ANNOYED', 'adj.', '', 'slightly angry; irritated.'],
-  ['PETULANT', 'adj.', '', 'childishly sulky or bad-tempered.'],
-  ['IRRITABLE', 'adj.', '', 'easily annoyed or made angry.'],
-  ['TRAVERSE', 'v.', '', 'to travel or extend across or through.'],
+  ['ANGRY', 'adj.', '', 'feeling or showing strong annoyance or hostility; very cross.'],
+  ['IRATE', 'adj.', '', 'extremely cross; feeling or showing great anger.'],
+  ['VEXED', 'adj.', '', 'cross, frustrated or worried.'],
+  ['IRKED', 'adj.', '', 'irritated; made cross.'],
+  ['TESTY', 'adj.', '', 'easily made cross; impatient and somewhat bad-tempered.'],
+  ['TETCHY', 'adj.', '', 'bad-tempered and irritable; quick to get cross.'],
+  ['CRABBY', 'adj.', 'informal', 'irritable and cross; ill-humoured.'],
+  ['GRUMPY', 'adj.', '', 'cross and sulky.'],
+  ['CRANKY', 'adj.', 'informal', 'ill-tempered and cross.'],
+  ['PEEVED', 'adj.', 'informal', 'annoyed; mildly cross.'],
+  ['MIFFED', 'adj.', 'informal', 'slightly put out; a little cross.'],
+  ['NARKED', 'adj.', 'Brit. & Aus. informal', 'annoyed; cross.'],
+  ['SHIRTY', 'adj.', 'Brit. informal', 'bad-tempered or cross.'],
+  ['STROPPY', 'adj.', 'Brit. informal', 'bad-tempered, cross and argumentative.'],
+  ['RATTY', 'adj.', 'informal', 'irritable; cross.'],
+  ['HUFFY', 'adj.', '', 'easily offended; sulkily cross.'],
+  ['SNAPPY', 'adj.', '', 'cross and inclined to speak sharply.'],
+  ['ANNOYED', 'adj.', '', 'slightly angry; cross.'],
+  ['PETULANT', 'adj.', '', 'childishly sulky or cross.'],
+  ['IRRITABLE', 'adj.', '', 'easily annoyed or made cross.'],
+  ['TRAVERSE', 'v.', '', 'to travel across or through; to cross.'],
   ['SPAN', 'v.', '', 'to extend from side to side of; to cross.'],
-  ['BRIDGE', 'v.', '', 'to make or be a way across (a gap, river, etc.).'],
+  ['BRIDGE', 'v.', '', 'to make or be a way across (a gap, river, etc.); to cross.'],
   ['FORD', 'v.', '', 'to cross (a river or stream) at a shallow place.'],
   ['INTERSECT', 'v.', '', 'to cross or pass across each other.'],
   ['HYBRID', 'n.', '', 'the offspring of two plants or animals of different kinds; a cross.'],
   ['MONGREL', 'n.', '', 'a dog of no definable breed; a cross between breeds.'],
   ['BLEND', 'n.', '', 'a mixture of different kinds; a cross between two things.'],
-  ['THWART', 'v.', '', 'to prevent (someone) from accomplishing something; to frustrate.'],
-  ['OPPOSE', 'v.', '', 'to set oneself against; to resist or contradict.'],
-  ['FOIL', 'v.', '', 'to prevent (something) from succeeding.'],
+  ['THWART', 'v.', '', 'to prevent (someone) from accomplishing something; to cross.'],
+  ['OPPOSE', 'v.', '', 'to set oneself against; to cross or contradict.'],
+  ['FOIL', 'v.', '', 'to prevent (something) from succeeding; to cross (a plan).'],
   ['CRUCIFIX', 'n.', '', 'a cross bearing a figure of Christ.'],
   ['ROOD', 'n.', 'archaic', 'a cross or crucifix, especially one above a church screen.'],
   ['BURDEN', 'n.', '', 'a heavy load of duty or suffering; a cross to bear.'],
   ['TRIAL', 'n.', '', 'a source of annoyance or hardship; a cross to bear.'],
-  ['TRAVAIL', 'n.', 'literary', 'painful or laborious effort; hardship.'],
+  ['TRAVAIL', 'n.', 'literary', 'painful or laborious effort; a cross to bear.'],
 ].map(([word, pos, label, def]) => ({ word, pos, label, def }));
 const boxed = word => [...word].map(ch => String.fromCodePoint(0x1F130 + ch.charCodeAt(0) - 65)).join('');
 function crossWord() {
@@ -629,8 +629,6 @@ async function homeView() {
   requestAnimationFrame(() => {
     let size = parseFloat(getComputedStyle(wordEl).fontSize);
     while (wordEl.scrollWidth > wordEl.clientWidth && size > 16) { size -= 1; wordEl.style.fontSize = size + 'px'; }
-    // Indent the definition by half a letter.
-    defEl.style.paddingLeft = Math.round(wordEl.scrollWidth / e.word.length / 2) + 'px';
   });
 }
 
