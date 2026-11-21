@@ -447,3 +447,12 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
   color: var(--text); background: var(--surface);
 }
 .brand-word .tile.block { background: var(--block); }
+
+/* ---- finishing panel: first and last answers in ---- */
+.finished { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.fin-row { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.fin-label { display: flex; justify-content: space-between; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+.fin-time { text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.fin-clue { font-size: 16px; line-height: 1.35; }
+.fin-clue b { margin-right: 4px; }
+.fin-answer { margin-top: 6px; font-size: 20px; font-weight: 700; letter-spacing: .08em; }

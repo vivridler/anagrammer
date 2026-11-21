@@ -1283,6 +1283,51 @@ async function solveView(p) {
     p.cursor = { i: sel, dir };
   }
 
+  // When each answer went in: { "across:12": { t: timer ms, letters } }. Only answers whose squares are
+  // all filled in normal (non-pencil) letters count; changing a completed answer re-times it.
+  p.answerLog = p.answerLog || {};
+  const answerKey = w => `${mainOf(w).dir}:${mainOf(w).num}`;
+  function logAnswersAt(i) {
+    for (const d of ['across', 'down']) {
+      const w = wordOf(i, d);
+      if (!w) continue;
+      const cellsOf = groupWords(w).flatMap(x => x.cells);
+      const key = answerKey(w);
+      const inked = cellsOf.every(c => p.fill[c] && !p.pencil[c]);
+      const letters = cellsOf.map(c => p.fill[c]).join('');
+      if (!inked) delete p.answerLog[key];
+      else if (!p.answerLog[key] || p.answerLog[key].letters !== letters) p.answerLog[key] = { t: elapsed(), letters };
+    }
+  }
+  // First and last answers in, with their clues, for the finishing panel (and later the puzzle list).
+  function firstAndLast() {
+    const entries = Object.entries(p.answerLog).sort((a, b) => a[1].t - b[1].t);
+    if (!entries.length) return null;
+    const describe = ([key, v]) => {
+      const [d, n] = key.split(':');
+      const w = num[d].find(x => x.num === +n);
+      if (!w) return null;
+      const clue = P.clueBody(clueText(w));
+      return {
+        name: groupWords(w).map(shortName).join(', '),
+        clue,
+        answer: P.formatAnswer(v.letters, P.parseEnumeration(clue)),
+        t: v.t,
+      };
+    };
+    return { first: describe(entries[0]), last: describe(entries[entries.length - 1]) };
+  }
+  function showFinished() {
+    const fl = p.finishSummary;
+    const row = (label, x) => x && h('div', { class: 'fin-row' },
+      h('div', { class: 'fin-label' }, label, h('span', { class: 'fin-time' }, fmtTime(x.t))),
+      h('div', { class: 'fin-clue' }, h('b', {}, x.name), ' ', x.clue || h('i', {}, 'no clue text')),
+      h('div', { class: 'fin-answer' }, x.answer));
+    sheet(`🎉 Finished in ${fmtTime(p.completedTime)}`, h('div', { class: 'finished pad' },
+      fl ? [row('First in', fl.first), fl.last && fl.last !== fl.first ? row('Last in', fl.last) : null]
+        : h('p', { class: 'hint' }, 'Every square is filled.')));
+  }
+
   function changed() {
     saveSoon(p);
     if (anyRefs) renderList();
@@ -1290,9 +1335,10 @@ async function solveView(p) {
     if (p.completedTime == null && isComplete()) {
       stopTimer();
       p.completedTime = p.timeMs;
+      p.finishSummary = firstAndLast();
       renderTimer();
       saveSoon(p);
-      toast(`🎉 Finished in ${fmtTime(p.completedTime)}!`, 4000);
+      showFinished();
     }
   }
 
@@ -1368,6 +1414,7 @@ async function solveView(p) {
   function type(ch) {
     p.fill[sel] = ch;
     p.pencil[sel] = !!p.pencilMode;
+    logAnswersAt(sel);
     const w = wordOf(sel, dir);
     if (w) {
       const parts = groupWords(w);
@@ -1380,6 +1427,7 @@ async function solveView(p) {
     changed();
   }
   function backspace() {
+    const before = sel;
     if (p.fill[sel]) p.fill[sel] = '';
     else {
       const w = wordOf(sel, dir);
@@ -1390,6 +1438,7 @@ async function solveView(p) {
       else if (prevPart) { dir = prevPart.dir; sel = prevPart.cells[prevPart.cells.length - 1]; p.fill[sel] = ''; }
     }
     p.pencil[sel] = false;
+    logAnswersAt(before); logAnswersAt(sel);
     changed();
   }
   function move(dr, dc) {
@@ -1519,7 +1568,7 @@ async function solveView(p) {
       h('button', { onclick: () => {
         if (!confirm('Clear all your answers and reset the timer?')) return;
         stopTimer();
-        resetFill(p); p.pencil = new Array(N).fill(false);
+        resetFill(p); p.pencil = new Array(N).fill(false); p.answerLog = {}; p.finishSummary = null;
         p.timeMs = 0; p.completedTime = null;
         startTimer(); renderTimer(); changed(); s.close();
       } }, '🧹  Clear answers'),
