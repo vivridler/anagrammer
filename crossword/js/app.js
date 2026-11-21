@@ -629,8 +629,8 @@ async function homeView() {
   requestAnimationFrame(() => {
     let size = parseFloat(getComputedStyle(wordEl).fontSize);
     while (wordEl.scrollWidth > wordEl.clientWidth && size > 16) { size -= 1; wordEl.style.fontSize = size + 'px'; }
-    // Start the definition under the word's second letter.
-    defEl.style.paddingLeft = Math.round(wordEl.scrollWidth / e.word.length) + 'px';
+    // Indent the definition by half a letter.
+    defEl.style.paddingLeft = Math.round(wordEl.scrollWidth / e.word.length / 2) + 'px';
   });
 }
 
