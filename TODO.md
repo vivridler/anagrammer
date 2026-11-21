@@ -80,6 +80,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [ ] **Search** – a search bar on the puzzles screen that searches the full text of clues and answers.
 - [ ] **Redesigned finished screen** – a new design for the panel shown when a puzzle is finished. *(Details to
   be agreed.)*
+- [x] **Header fixed in place** – the page itself no longer scrolls or bounces; only the list/content areas do.
+  *(iPhone rubber-banding can't be fully reproduced in the emulator; check on the phone.)*
 
 ## Notes on how these work
 
