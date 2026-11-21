@@ -1,8 +1,8 @@
 // Offline support for the app shell.
-const CACHE = 'squares-v18';
+const CACHE = 'squares-v19';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/app.js', 'js/backup.js', 'js/guardian.js', 'js/pdfimport.js', 'js/importer.js', 'js/vision.js', 'js/puzzle.js', 'js/store.js', 'js/ocr.js',
+  'js/app.js', 'js/backup.js', 'js/pdfimport.js', 'js/importer.js', 'js/vision.js', 'js/puzzle.js', 'js/store.js', 'js/ocr.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/icon-maskable.png',
 ];
 
