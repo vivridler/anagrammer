@@ -382,19 +382,52 @@ async function createBlank() {
 const SORTS = { date: 'Date', source: 'Source', setter: 'Setter', number: 'Number' };
 
 // Header: a random synonym of "cross", in boxed letters (🄰–🅉), different each time the screen loads.
+// Each with a dictionary-style entry for the sense that relates to "cross".
 const CROSS_WORDS = [
-  'ANGRY', 'IRATE', 'VEXED', 'IRKED', 'TESTY', 'TETCHY', 'CRABBY', 'GRUMPY', 'CRANKY', 'PEEVED', 'MIFFED',
-  'NARKED', 'SHIRTY', 'STROPPY', 'RATTY', 'HUFFY', 'SNAPPY', 'ANNOYED', 'PETULANT', 'IRRITABLE',
-  'TRAVERSE', 'SPAN', 'BRIDGE', 'FORD', 'INTERSECT', 'HYBRID', 'MONGREL', 'BLEND', 'THWART', 'OPPOSE', 'FOIL',
-  'CRUCIFIX', 'ROOD', 'BURDEN', 'TRIAL', 'TRAVAIL',
-];
+  ['ANGRY', 'adj.', '', 'feeling or showing strong annoyance or hostility.'],
+  ['IRATE', 'adj.', '', 'feeling or showing great anger.'],
+  ['VEXED', 'adj.', '', 'annoyed, frustrated or worried.'],
+  ['IRKED', 'adj.', '', 'irritated; annoyed.'],
+  ['TESTY', 'adj.', '', 'easily irritated; impatient and somewhat bad-tempered.'],
+  ['TETCHY', 'adj.', '', 'bad-tempered and irritable.'],
+  ['CRABBY', 'adj.', 'informal', 'irritable; ill-humoured.'],
+  ['GRUMPY', 'adj.', '', 'bad-tempered and sulky.'],
+  ['CRANKY', 'adj.', 'informal', 'ill-tempered; irritable.'],
+  ['PEEVED', 'adj.', 'informal', 'annoyed; irritated.'],
+  ['MIFFED', 'adj.', 'informal', 'slightly put out; annoyed.'],
+  ['NARKED', 'adj.', 'Brit. & Aus. informal', 'annoyed; irritated.'],
+  ['SHIRTY', 'adj.', 'Brit. informal', 'bad-tempered or annoyed.'],
+  ['STROPPY', 'adj.', 'Brit. informal', 'bad-tempered and argumentative.'],
+  ['RATTY', 'adj.', 'informal', 'irritable; bad-tempered.'],
+  ['HUFFY', 'adj.', '', 'easily offended; sulky.'],
+  ['SNAPPY', 'adj.', '', 'irritable and inclined to speak sharply.'],
+  ['ANNOYED', 'adj.', '', 'slightly angry; irritated.'],
+  ['PETULANT', 'adj.', '', 'childishly sulky or bad-tempered.'],
+  ['IRRITABLE', 'adj.', '', 'easily annoyed or made angry.'],
+  ['TRAVERSE', 'v.', '', 'to travel or extend across or through.'],
+  ['SPAN', 'v.', '', 'to extend from side to side of; to cross.'],
+  ['BRIDGE', 'v.', '', 'to make or be a way across (a gap, river, etc.).'],
+  ['FORD', 'v.', '', 'to cross (a river or stream) at a shallow place.'],
+  ['INTERSECT', 'v.', '', 'to cross or pass across each other.'],
+  ['HYBRID', 'n.', '', 'the offspring of two plants or animals of different kinds; a cross.'],
+  ['MONGREL', 'n.', '', 'a dog of no definable breed; a cross between breeds.'],
+  ['BLEND', 'n.', '', 'a mixture of different kinds; a cross between two things.'],
+  ['THWART', 'v.', '', 'to prevent (someone) from accomplishing something; to frustrate.'],
+  ['OPPOSE', 'v.', '', 'to set oneself against; to resist or contradict.'],
+  ['FOIL', 'v.', '', 'to prevent (something) from succeeding.'],
+  ['CRUCIFIX', 'n.', '', 'a cross bearing a figure of Christ.'],
+  ['ROOD', 'n.', 'archaic', 'a cross or crucifix, especially one above a church screen.'],
+  ['BURDEN', 'n.', '', 'a heavy load of duty or suffering; a cross to bear.'],
+  ['TRIAL', 'n.', '', 'a source of annoyance or hardship; a cross to bear.'],
+  ['TRAVAIL', 'n.', 'literary', 'painful or laborious effort; hardship.'],
+].map(([word, pos, label, def]) => ({ word, pos, label, def }));
 const boxed = word => [...word].map(ch => String.fromCodePoint(0x1F130 + ch.charCodeAt(0) - 65)).join('');
 function crossWord() {
   const last = store.get('squares.lastHeader', '');
-  const options = CROSS_WORDS.filter(w => w !== last);
-  const word = options[Math.floor(Math.random() * options.length)];
-  store.set('squares.lastHeader', word);
-  return word;
+  const options = CROSS_WORDS.filter(e => e.word !== last);
+  const entry = options[Math.floor(Math.random() * options.length)];
+  store.set('squares.lastHeader', entry.word);
+  return entry;
 }
 
 function sortPuzzles(list, key, dir) {
@@ -538,7 +571,7 @@ function backupMenu() {
 }
 
 async function homeView() {
-  const headerWord = crossWord();
+  const headerWord = crossWord(); // { word, pos, label, def }
   const all = (await DB.listPuzzles()).map(p => cache.get(p.id) || p);
   let key = store.get('squares.sort', 'date');
   if (!SORTS[key]) key = 'date';
@@ -570,7 +603,7 @@ async function homeView() {
   render();
 
   app.replaceChildren(
-    header(boxed(headerWord), { actions: [h('button', { class: 'icon', 'aria-label': 'Back up and restore', onclick: backupMenu }, '⋯')] }),
+    header(boxed(headerWord.word), { actions: [h('button', { class: 'icon', 'aria-label': 'Back up and restore', onclick: backupMenu }, '⋯')] }),
     h('main', { class: 'scroll pad home' },
       all.length ? chips : null,
       all.length ? listEl : h('div', { class: 'empty' },
@@ -582,11 +615,19 @@ async function homeView() {
   bar.classList.add('home-bar');
   const h1 = bar.querySelector('h1');
   h1.classList.add('brand');
-  h1.setAttribute('aria-label', headerWord.toLowerCase()); // read as a word, not letter by letter
+  // The boxed word, with its dictionary entry underneath.
+  const e = headerWord;
+  const wordEl = h('span', { class: 'brand-word', 'aria-hidden': 'true' }, boxed(e.word));
+  h1.replaceChildren(wordEl,
+    h('span', { class: 'brand-def' },
+      h('i', { class: 'pos' }, e.pos), ' ',
+      e.label ? h('span', { class: 'label' }, e.label + ' ') : null,
+      e.def));
+  h1.setAttribute('aria-label', `${e.word.toLowerCase()}, ${e.pos === 'adj.' ? 'adjective' : e.pos === 'v.' ? 'verb' : 'noun'}: ${e.def}`);
   // Big, but shrink a long word until it fits beside the menu button.
   requestAnimationFrame(() => {
-    let size = parseFloat(getComputedStyle(h1).fontSize);
-    while (h1.scrollWidth > h1.clientWidth && size > 16) { size -= 1; h1.style.fontSize = size + 'px'; }
+    let size = parseFloat(getComputedStyle(wordEl).fontSize);
+    while (wordEl.scrollWidth > wordEl.clientWidth && size > 16) { size -= 1; wordEl.style.fontSize = size + 'px'; }
   });
 }
 

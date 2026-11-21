@@ -409,3 +409,13 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
 /* ---- puzzles-screen header: the boxed "cross" word ---- */
 .bar.home-bar { padding-top: calc(env(safe-area-inset-top) + 28px); padding-bottom: 12px; }
 .bar.home-bar h1.brand { font-size: 36px; line-height: 1.2; letter-spacing: .04em; text-overflow: clip; padding-left: 4px; }
+
+/* ---- header word's dictionary entry ---- */
+.bar.home-bar h1.brand { display: flex; flex-direction: column; gap: 6px; white-space: normal; overflow: visible; min-width: 0; }
+.bar.home-bar .brand-word { font-size: 36px; line-height: 1.35; letter-spacing: .04em; white-space: nowrap; overflow: hidden; }
+.bar.home-bar .brand-def {
+  font: 15px/1.35 Georgia, 'Times New Roman', serif; letter-spacing: 0; font-weight: 400; color: var(--muted);
+  padding-right: 8px;
+}
+.brand-def .pos { color: var(--text); margin-right: 2px; }
+.brand-def .label { font-style: italic; font-size: 13px; }
