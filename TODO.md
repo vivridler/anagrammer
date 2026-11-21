@@ -86,6 +86,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] **Letter count after the header definition**, crossword-style, e.g. "slightly angry; cross (7)".
 - [x] **New icon** – the squircle outline divided into four quadrants: bottom-right black, a "1" in the top-left
   corner of the top-left quadrant, like a tiny crossword.
+- [x] **Sort by edit date** – an *Edited* chip sorts by when each puzzle was last worked on (newest first; tap again
+  to flip).
 
 ## Notes on how these work
 
