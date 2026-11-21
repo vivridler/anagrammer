@@ -1,7 +1,8 @@
 import * as V from './vision.js';
 import * as P from './puzzle.js';
 import * as DB from './store.js';
-import { analyzeGrid, findCorners, readClueText, cluesFromOcr, scaledCanvas } from './importer.js';
+import { analyzeGrid, findCorners, readClueText, cluesFromOcr, scaledCanvas, textFromPdfItems, solutionFromPdf } from './importer.js';
+import { readPdf } from './pdfimport.js';
 import { makeBackup, restoreBackup, saveFile } from './backup.js';
 import * as Guardian from './guardian.js';
 
@@ -437,50 +438,89 @@ function addMenu() {
   const s = sheet('New crossword', h('div', { class: 'menu' },
     h('button', { class: 'primary', onclick: async () => { s.close(); createFromImage(await filePicker({ capture: true })); } }, '📷  Take a photo'),
     h('button', { onclick: async () => { s.close(); createFromImage(await filePicker()); } }, '🖼  Choose an image'),
+    h('button', { onclick: async () => { s.close(); createFromPdf(await filePicker({ accept: 'application/pdf,.pdf' })); } }, '📄  Import a PDF'),
     h('button', { onclick: () => { s.close(); guardianList(); } }, '📰  Guardian cryptic'),
     h('button', { onclick: () => { s.close(); createBlank(); } }, '▦  Blank grid')));
 }
 
-// Recent Guardian cryptics to import.
+// Recent Guardian cryptics. The Guardian doesn't let apps download its crosswords, but each one
+// has a print PDF: tapping a puzzle opens that PDF to save, then + → Import a PDF reads it exactly.
 async function guardianList() {
   const listEl = h('div', { class: 'glist' }, h('p', { class: 'hint' }, 'Loading recent cryptics…'));
   const s = sheet('Guardian cryptic', h('div', { class: 'gwrap' },
+    h('p', { class: 'hint gsteps' }, 'Tap a puzzle to open its print PDF, then Share → Save to Files. Back here, tap ', h('b', {}, 'Import the PDF'), '.'),
     listEl,
     h('div', { class: 'toolbar flat pad' },
+      h('button', { class: 'primary', onclick: async () => { s.close(); createFromPdf(await filePicker({ accept: 'application/pdf,.pdf' })); } }, '📄 Import the PDF'),
+      h('span', { class: 'grow' }),
       h('button', { class: 'small', onclick: () => {
-        const k = prompt('Guardian API key (leave empty to use the shared "test" key). Get a free one at open-platform.theguardian.com.', Guardian.apiKey() === 'test' ? '' : Guardian.apiKey());
+        const k = prompt('Guardian API key (from open-platform.theguardian.com), used to list puzzle numbers. Leave empty to list by date only.', Guardian.apiKey() || '');
         if (k !== null) { Guardian.setApiKey(k.trim()); s.close(); guardianList(); }
       } }, '⚙︎ API key'))), { tall: true });
-  try {
-    const [items, mine] = await Promise.all([Guardian.recentPuzzles('cryptic'), DB.listPuzzles()]);
-    const have = new Map(mine.filter(x => x.sourceId).map(x => [x.sourceId, x]));
-    if (!items.length) { listEl.replaceChildren(h('p', { class: 'hint' }, 'No puzzles found.')); return; }
-    listEl.replaceChildren(h('ul', { class: 'library' }, items.map(it => {
-      const existing = have.get(`guardian:${it.id}`);
-      return h('li', { onclick: () => { s.close(); existing ? go(`#/p/${existing.id}/solve`) : importGuardian(it); } },
-        h('div', { class: 'row1' },
-          h('span', { class: 'title' }, it.title.replace(/^Cryptic crossword\s*/i, 'Cryptic ')),
-          h('span', { class: 'date' }, fmtDay(isoDay(Date.parse(it.date))))),
-        existing ? h('div', { class: 'sub' }, '✓ In your puzzles — ' + statusLine(existing)) : null);
-    })));
-  } catch (err) {
-    listEl.replaceChildren(h('p', { class: 'hint' }, err.message || String(err)));
-  }
+  const mine = await DB.listPuzzles();
+  const have = new Map(mine.filter(x => x.meta && /guardian/i.test(x.meta.source || '') && x.meta.number).map(x => [String(x.meta.number), x]));
+  const haveByDate = new Map(mine.filter(x => x.meta && /guardian/i.test(x.meta.source || '')).map(x => [x.meta.date, x]));
+  let items;
+  try { items = await Guardian.recentPuzzles('cryptic'); }
+  catch { items = Guardian.recentDates(); } // no key / no answer: list by date
+  listEl.replaceChildren(h('ul', { class: 'library' }, items.map(it => {
+    const existing = (it.number && have.get(String(it.number))) || (!it.number && haveByDate.get(it.day));
+    return h('li', {
+      onclick: () => {
+        if (existing) { s.close(); go(`#/p/${existing.id}/solve`); return; }
+        window.open(Guardian.pdfUrl(it.day), '_blank', 'noopener');
+      },
+    },
+      h('div', { class: 'row1' },
+        h('span', { class: 'title' }, it.number ? `Cryptic No ${Number(it.number).toLocaleString('en-GB')}` : 'Cryptic'),
+        h('span', { class: 'date' }, fmtDay(it.day))),
+      existing ? h('div', { class: 'sub' }, '✓ In your puzzles — ' + statusLine(existing)) : null);
+  })));
 }
 
-async function importGuardian(item) {
-  const done = busy('Fetching from the Guardian…');
+// A crossword PDF (e.g. a Guardian print version): grid from the drawing, clues as exact text.
+async function createFromPdf(file) {
+  if (!file) return;
+  const done = busy('Reading the PDF…');
   try {
-    const f = Guardian.toPuzzle(await Guardian.fetchCrossword(item.id));
+    const { canvas, items } = await readPdf(file);
+    const blob = await canvasToBlob(canvas, 0.9);
+    const { img, url } = await loadImage(blob);
+    const corners = findCorners(img, 2400);
+    const grid = analyzeGrid(img, corners, null, 2400);
+    URL.revokeObjectURL(url);
+    const text = textFromPdfItems(canvas, items, corners);
+    const num = P.numberGrid(grid.rows, grid.cols, grid.blocks);
+    const rec = P.reconcileClues(P.parseClueText(text), num);
+    const cluesText = { across: P.cluesToText(rec.across), down: P.cluesToText(rec.down) };
+    const guess = P.guessMeta(text);
+    const guardian = /guardian/i.test(text.split('\n').slice(0, 3).join(' '));
+    const fileDay = (file.name || '').match(/(20\d\d)(\d\d)(\d\d)/);
+    const meta = {
+      source: guardian ? 'The Guardian' : await lastSource(),
+      setter: guess.setter || '', number: guess.number || '',
+      date: fileDay ? `${fileDay[1]}-${fileDay[2]}-${fileDay[3]}` : isoDay(Date.now()),
+    };
+    // Already imported? Open it instead of making a copy.
+    const all = await DB.listPuzzles();
+    const dup = meta.number && all.find(x => x.meta && x.meta.number === meta.number && (x.meta.source || '') === meta.source);
+    const extra = applyPrintedSolution(canvas, items, all);
+    if (dup) {
+      toast(`You already have ${displayTitle(dup)}; opening it.` + (await extra), 4000);
+      go(`#/p/${dup.id}/solve`);
+      return;
+    }
     const p = {
-      id: newId(), title: f.title, created: Date.now(), meta: f.meta, sourceId: f.sourceId || `guardian:${item.id}`,
-      image: null, clueImage: null, corners: null, rows: f.rows, cols: f.cols, blocks: f.blocks,
-      cluesText: f.cluesText, clues: P.cluesFromText(f.cluesText), cluesStatus: 'done',
-      solution: f.solution, fill: null, stage: 'solve',
+      id: newId(), title: file.name ? file.name.replace(/\.pdf$/i, '') : 'Crossword', created: Date.now(), meta,
+      image: blob, imageWidth: canvas.width, clueImage: null, corners, rows: grid.rows, cols: grid.cols, blocks: grid.blocks,
+      detectedFor: JSON.stringify(corners), cluesText, clues: P.cluesFromText(cluesText), cluesStatus: 'done',
+      ocrText: text, fill: null, stage: 'solve',
     };
     resetFill(p);
     cache.set(p.id, p);
     await DB.savePuzzle(p);
+    const note = await extra;
+    if (note) toast(note.trim(), 4500);
     go(`#/p/${p.id}/solve`);
   } catch (err) {
     console.error(err);
@@ -488,6 +528,31 @@ async function importGuardian(item) {
   } finally {
     done();
   }
+}
+
+// Guardian PDFs print the previous puzzle's solution: if you have that puzzle, give it the answers
+// so Check answers works there. Resolves to a short note for the user ('' if nothing was done).
+async function applyPrintedSolution(canvas, items, all) {
+  const head = items.find(it => /^\s*solution\b/i.test(it.str));
+  if (!head) return '';
+  // "Solution No. 30,168" may be split over several text pieces on the same line.
+  const hgt = head.y1 - head.y0;
+  const headLine = items.filter(it => Math.abs((it.y0 + it.y1) / 2 - (head.y0 + head.y1) / 2) < hgt * 0.6 && it.x0 >= head.x0 - hgt)
+    .sort((a, b) => a.x0 - b.x0).map(it => it.str).join(' ');
+  const m = headLine.match(/(\d{1,3}(?:,\d{3})+|\d{2,6})/);
+  if (!m) return '';
+  const number = m[1].replace(/,/g, '');
+  const target = all.find(x => x.meta && /guardian/i.test(x.meta.source || '') && String(x.meta.number) === number);
+  if (!target || target.solution) return '';
+  const sol = solutionFromPdf(canvas, items, target.rows, target.cols);
+  if (!sol) return '';
+  // Only accept it if it fits the grid exactly: a letter in every white square, none in black ones.
+  const fits = sol.letters.every((v, i) => (target.blocks[i] ? !v : !!v));
+  if (!fits) return '';
+  const p = cache.get(target.id) || target;
+  p.solution = sol.letters;
+  await DB.savePuzzle(p);
+  return ` Answers added for ${displayTitle(p)}: Check answers now works there.`;
 }
 
 // Back up / restore all puzzles (moving them between Safari and the home-screen app on iPhone).
