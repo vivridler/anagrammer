@@ -381,7 +381,7 @@ async function createBlank() {
   go(`#/p/${p.id}/grid`);
 }
 
-const SORTS = { date: 'Date', source: 'Source', setter: 'Setter' };
+const SORTS = { date: 'Date', edited: 'Edited', source: 'Source', setter: 'Setter' };
 
 // Header: a random synonym of "cross", in boxed letters (🄰–🅉), different each time the screen loads.
 // Each with a dictionary-style entry for the sense that relates to "cross" (every definition uses the word).
@@ -436,10 +436,11 @@ function sortPuzzles(list, key, dir) {
   const byDate = (a, b) => metaOf(b).date.localeCompare(metaOf(a).date) || (b.created || 0) - (a.created || 0);
   const cmp = {
     date: byDate,
+    edited: (a, b) => (b.updated || 0) - (a.updated || 0), // last saved, i.e. last worked on
     source: (a, b) => metaOf(a).source.localeCompare(metaOf(b).source, undefined, { sensitivity: 'base' }),
     setter: (a, b) => metaOf(a).setter.localeCompare(metaOf(b).setter, undefined, { sensitivity: 'base' }),
   }[key];
-  const empty = p => key !== 'date' && !metaOf(p)[key];
+  const empty = p => (key === 'source' || key === 'setter') && !metaOf(p)[key];
   return [...list].sort((a, b) => {
     if (empty(a) !== empty(b)) return empty(a) ? 1 : -1; // puzzles missing this detail go last
     const c = cmp(a, b) * (dir === 'asc' ? -1 : 1);
