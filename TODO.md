@@ -66,6 +66,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] **Back up & restore moved into the + menu** (a smaller option beneath the others).
 - [x] **Multi-part clues written with slashes** (e.g. "1/13/24 …", "18/12 …", "See 18 Down") now link up;
   text after a clue's (lengths), like a prize-puzzle footer, no longer gets stuck onto the last clue.
+- [x] **Filter puzzles by complete / incomplete** – a picker next to the sort chips (All / Incomplete / Complete);
+  remembered; complete = every square filled.
 
 ## Notes on how these work
 

@@ -580,7 +580,18 @@ async function homeView() {
 
   const listEl = h('ul', { class: 'library' });
   const chips = h('div', { class: 'sortbar', role: 'group', 'aria-label': 'Sort puzzles' });
+  // Filter: all puzzles, or only incomplete / complete ones (complete = every square filled).
+  const FILTERS = { all: 'All', incomplete: 'Incomplete', complete: 'Complete' };
+  let filter = store.get('squares.filter', 'all');
+  if (!FILTERS[filter]) filter = 'all';
+  const isDone = p => p.completedTime != null;
+  const filterEl = h('select', {
+    class: 'chip filter' + (filter !== 'all' ? ' on' : ''), 'aria-label': 'Show puzzles',
+    onchange: e => { filter = e.target.value; store.set('squares.filter', filter); render(); },
+  }, Object.entries(FILTERS).map(([k, label]) => h('option', { value: k, selected: k === filter }, label)));
+
   function render() {
+    filterEl.className = 'chip filter' + (filter !== 'all' ? ' on' : '');
     chips.replaceChildren(h('span', { class: 'sort-label' }, 'Sort'), ...Object.entries(SORTS).map(([k, label]) =>
       h('button', {
         class: 'chip' + (k === key ? ' on' : ''), 'aria-pressed': k === key ? 'true' : 'false',
@@ -590,8 +601,13 @@ async function homeView() {
           store.set('squares.sort', key); store.set('squares.sortDir', dir);
           render();
         },
-      }, label, k === key ? (dir === 'desc' ? ' ↓' : ' ↑') : '')));
-    listEl.replaceChildren(...sortPuzzles(all, key, dir).map(p => {
+      }, label, k === key ? (dir === 'desc' ? ' ↓' : ' ↑') : '')), h('span', { class: 'sort-sep' }), filterEl);
+    const shown = all.filter(p => filter === 'all' || (filter === 'complete' ? isDone(p) : !isDone(p)));
+    if (!shown.length) {
+      listEl.replaceChildren(h('p', { class: 'hint filter-empty' }, filter === 'complete' ? 'No complete puzzles yet.' : 'No incomplete puzzles — all done!'));
+      return;
+    }
+    listEl.replaceChildren(...sortPuzzles(shown, key, dir).map(p => {
       const clue = firstClue(p);
       return h('li', { onclick: () => go(`#/p/${p.id}/solve`) },
         h('div', { class: 'row1' },
