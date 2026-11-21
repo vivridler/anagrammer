@@ -70,6 +70,11 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   Complete; remembered; complete = every square filled. Sort by Number removed so it all fits on one line.
 - [x] **Black square after the header word** – the word is now drawn as a row of crossword squares (instead of boxed
   Unicode letters, which iPhone draws in its own style), ending in a matching black square.
+- [x] **First and last answers in** – when a puzzle is finished, a panel shows the time plus the first and last
+  answers entered (clue, answer laid out by its lengths, and the time each went in). Only answers in normal
+  (non-pencil) letters count; changing a completed answer re-times it. Recorded from 21 Nov onwards.
+- [ ] **First/last in on the puzzle list** – show something of the above for finished puzzles in the list (to be
+  decided; the data is already stored with each finished puzzle).
 
 ## Notes on how these work
 
