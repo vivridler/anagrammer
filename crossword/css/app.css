@@ -462,3 +462,10 @@ body.solving .kbd { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
   .brand-word .tile { border-color: #f3f4f6; color: #f3f4f6; background: var(--surface); }
   .brand-word .tile.block { background: #000; border-color: #f3f4f6; }
 }
+
+/* ---- keep headers in place: the page itself never scrolls or bounces (iPhone rubber-banding moved the
+   whole page, header included); only the list/content areas scroll, and their bounce stays inside them. ---- */
+html, body { overflow: hidden; overscroll-behavior: none; }
+body { position: fixed; inset: 0; width: 100%; }
+#app { height: 100%; }
+.scroll { overscroll-behavior: contain; }
