@@ -649,10 +649,10 @@ async function homeView() {
   h1.setAttribute('aria-label', `${e.word.toLowerCase()}, ${e.pos === 'adj.' ? 'adjective' : e.pos === 'v.' ? 'verb' : 'noun'}: ${e.def}`);
   // Big, but shrink a long word until it fits beside the menu button.
   requestAnimationFrame(() => {
-    // Square size: up to 40px, smaller when the word (plus its black square) needs the room.
+    // Square size: up to 34px, smaller when the word (plus its black square) needs the room.
     const n = e.word.length + 1;
     const fit = Math.floor(wordEl.clientWidth / (n + (n - 1) * 0.14));
-    wordEl.style.setProperty('--t', Math.max(16, Math.min(40, fit)) + 'px');
+    wordEl.style.setProperty('--t', Math.max(16, Math.min(34, fit)) + 'px');
   });
 }
 
