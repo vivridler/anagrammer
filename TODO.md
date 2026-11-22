@@ -74,8 +74,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
 - [x] **First and last answers in** – when a puzzle is finished, a panel shows the time plus the first and last
   answers entered (clue, answer laid out by its lengths, and the time each went in). Only answers in normal
   (non-pencil) letters count; changing a completed answer re-times it. Recorded from 21 Nov onwards.
-- [ ] **First/last in on the puzzle list** – show something of the above for finished puzzles in the list (to be
-  decided; the data is already stored with each finished puzzle).
+- [x] **First/last in on the puzzle list** – finished puzzles show "100% · 26:06 · WAY — ARC UP" (first answer in —
+  last answer in); "✓ Finished" and the stopwatch emoji removed.
 - [x] **Header text colour in dark mode** – white outlines and letters on the squares, and a white outline around the
   trailing black square.
 - [ ] **Search** – a search bar on the puzzles screen that searches the full text of clues and answers.

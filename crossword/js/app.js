@@ -460,11 +460,16 @@ function firstClue(p) {
   return '';
 }
 
+// "28% · 25:41"; finished: "100% · 26:06 · WAY — ARC UP" (first answer in — last answer in).
 function statusLine(p) {
   if (jobs.has(p.id)) return 'Reading clues…';
-  if (p.completedTime != null) return `✓ Finished · ${fmtTime(p.completedTime)}`;
+  if (p.completedTime != null) {
+    const fl = p.finishSummary;
+    const foiLoi = fl && fl.first && fl.last ? `${fl.first.answer} — ${fl.last.answer}` : '';
+    return ['100%', fmtTime(p.completedTime), foiLoi].filter(Boolean).join(' · ');
+  }
   const pct = progressOf(p);
-  const parts = [pct === null ? '' : `${pct}%`, p.timeMs >= 1000 ? `⏱ ${fmtTime(p.timeMs)}` : ''].filter(Boolean);
+  const parts = [pct === null ? '' : `${pct}%`, p.timeMs >= 1000 ? fmtTime(p.timeMs) : ''].filter(Boolean);
   return parts.join(' · ') || 'Not started';
 }
 
