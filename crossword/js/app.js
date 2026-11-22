@@ -598,7 +598,7 @@ async function homeView() {
     filterEl.className = 'chip filter' + (filter !== 'all' ? ' on' : '');
     filterEl.textContent = FILTERS[filter];
     filterEl.setAttribute('aria-label', `Showing ${FILTERS[filter].toLowerCase()} puzzles. Tap to change.`);
-    chips.replaceChildren(h('span', { class: 'sort-label' }, 'Sort'), ...Object.entries(SORTS).map(([k, label]) =>
+    chips.replaceChildren(...Object.entries(SORTS).map(([k, label]) =>
       h('button', {
         class: 'chip' + (k === key ? ' on' : ''), 'aria-pressed': k === key ? 'true' : 'false',
         onclick: () => {
