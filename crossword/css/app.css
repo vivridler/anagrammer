@@ -478,3 +478,5 @@ body { background: var(--surface); }
 /* Header colour behind the status bar at the top, page colour behind the home bar at the bottom. */
 #app { background: linear-gradient(var(--surface) 0 50%, var(--bg) 50% 100%); }
 #app > main, .solve-main, .xw-wrap, .stage + .toolbar, main.scroll { background: var(--bg); }
+.sortbar { gap: 4px; }
+.sortbar .chip { padding: 4px 9px; font-size: 13px; }
