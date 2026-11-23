@@ -1085,6 +1085,19 @@ async function solveView(p) {
   if (!p.fill || p.fill.length !== N) resetFill(p);
   p.cluesText = p.cluesText || { across: '', down: '' };
   p.clues = p.clues || { across: {}, down: {} };
+  // Puzzles imported before references like "13 21-down stuck in… (5)" were told apart from linked answers.
+  {
+    const fixed = P.fixFalseLinks(p.clues, P.numberGrid(p.rows, p.cols, p.blocks));
+    if (fixed.changed) {
+      for (const d of ['across', 'down']) {
+        for (const [n, t] of Object.entries(fixed.clues[d])) {
+          if (t !== p.clues[d][n]) p.cluesText[d] = P.setClueLine(p.cluesText[d], +n, t);
+        }
+      }
+      p.clues = P.cluesFromText(p.cluesText);
+      saveSoon(p);
+    }
+  }
   // Resume clue reading that was interrupted (e.g. app closed mid-way).
   if (p.cluesStatus === 'pending' && !jobs.has(p.id)) startClueJob(p);
 

@@ -88,6 +88,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   corner of the top-left quadrant, like a tiny crossword.
 - [x] **Sort by edit date** – an *Edited* chip sorts by when each puzzle was last worked on (newest first; tap again
   to flip).
+- [x] **References vs linked answers** – "13 21-down stuck in… (5)" is a reference, not a two-part answer: a leading
+  entry number only links when the clue's (lengths) cover both entries. Existing puzzles are fixed when opened.
 
 ## Notes on how these work
 

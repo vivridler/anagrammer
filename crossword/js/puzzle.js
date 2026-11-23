@@ -34,7 +34,8 @@ export function numberGrid(rows, cols, blocks) {
 // A header is the word alone, or followed by ":" or straight away by a clue number.
 const HEADER = /^\s*(across|down)\s*(?:[:.\-]\s*)?(?=$|\d)(.*)$/i;
 // "12 Clue", "12. Clue", and linked clues such as "24,2-down Clue", "1, 5 Clue" or "1/13/24 Clue".
-const CLUE = /^\s*(\d{1,3})((?:\s*[,/]\s*\d{1,3}(?:\s*-?\s*(?:across|down|ac|dn|a|d)\b)?|\s*\.\s*\d{1,3}\s*-?\s*(?:across|down)\b|\s*,?\s+\d{1,3}\s*-\s*(?:across|down)\b)*)(?:\s*[.:)]\s*|\s+)(\S.*)$/i;
+// ("23 1-across Clue", without a comma, is decided later against the grid: link or just a reference.)
+const CLUE = /^\s*(\d{1,3})((?:\s*[,/]\s*\d{1,3}(?:\s*-?\s*(?:across|down|ac|dn|a|d)\b)?|\s*\.\s*\d{1,3}\s*-?\s*(?:across|down)\b)*)(?:\s*[.:)]\s*|\s+)(\S.*)$/i;
 const ENUM_END = /\(\s*\d[\d\s,.\-]*\)\s*$/;
 
 // Fix the commonest OCR confusions in a leading clue number ("l2" -> "12", "1O" -> "10").
@@ -158,6 +159,10 @@ export function reconcileClues(parsed, num) {
       if (fixed == null) { out.push([n, t]); return; } // leave as-is for the user to see
       used.add(fixed);
       if (!ENUM_END.test(t) && !/^see\b/i.test(t)) t = `${t} (${lens.get(fixed)})`;
+      const w = num[dir].find(x => x.num === fixed);
+      const unwrapped = w && unwrapFalseLink(t, w, num);
+      if (unwrapped != null) t = unwrapped;
+      else if (w) t = relinkByLength(t, w, num);
       out.push([fixed, t]);
     });
     result[dir] = out;
@@ -344,4 +349,51 @@ export function guessMeta(text) {
     if (lone) out.number = lone;
   }
   return out;
+}
+
+// "13 21-down stuck in tunnel (5)" names another entry but isn't a linked answer: its (length) covers only
+// entry 13. Parsing reads the leading "21-down" as a link ("(with 21-down) …"), so undo that whenever the
+// length fits the entry on its own rather than all the parts together. Returns the fixed text, or null.
+export function unwrapFalseLink(text, word, num) {
+  const m = String(text || '').match(/^\(with ([^)]*)\)\s*(.*)$/i);
+  if (!m) return null;
+  const e = parseEnumeration(m[2]);
+  if (!e) return null;
+  const total = e.lengths.reduce((a, b) => a + b, 0);
+  let sum = word.cells.length;
+  for (const ref of m[1].split(',')) {
+    const r = ref.trim().match(/^(\d{1,3})\s*-?\s*(across|down|a|d)?$/i);
+    const d = r && r[2] ? (/^a/i.test(r[2]) ? 'across' : 'down') : null;
+    const other = r && (d ? num[d].find(w => w.num === +r[1])
+      : num[word.dir].find(w => w.num === +r[1]) || num[word.dir === 'across' ? 'down' : 'across'].find(w => w.num === +r[1]));
+    if (other) sum += other.cells.length;
+  }
+  if (total !== word.cells.length || total === sum) return null;
+  return `${m[1]} ${m[2]}`;
+}
+
+// Apply unwrapFalseLink to every clue. Returns { across, down } maps and whether anything changed.
+export function fixFalseLinks(clues, num) {
+  let changed = false;
+  const out = { across: { ...(clues.across || {}) }, down: { ...(clues.down || {}) } };
+  for (const d of ['across', 'down']) {
+    for (const w of num[d]) {
+      const fixed = unwrapFalseLink(out[d][w.num], w, num);
+      if (fixed != null) { out[d][w.num] = fixed; changed = true; }
+    }
+  }
+  return { clues: out, changed };
+}
+
+// "23 1-across Trains here (5,7)": an OCR'd linked clue whose comma was lost. Treat a leading "N-direction" as a
+// link only when the (lengths) add up to this entry plus that one; otherwise it's a reference, left as written.
+export function relinkByLength(text, word, num) {
+  const m = String(text || '').match(/^(\d{1,3})\s*-\s*(across|down)\s+(\S.*)$/i);
+  if (!m) return text;
+  const e = parseEnumeration(m[3]);
+  const other = num[m[2].toLowerCase()].find(w => w.num === +m[1]);
+  if (!e || !other || other === word) return text;
+  const total = e.lengths.reduce((a, b) => a + b, 0);
+  return total === word.cells.length + other.cells.length && total !== word.cells.length
+    ? `(with ${m[1]}-${m[2].toLowerCase()}) ${m[3]}` : text;
 }
