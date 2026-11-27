@@ -599,23 +599,80 @@ async function homeView() {
     onclick: () => { filter = order[(order.indexOf(filter) + 1) % order.length]; store.set('squares.filter', filter); render(); },
   });
 
+  // Value filters: hold the Source or Setter chip to choose which values to show. Stored as
+  // { source: ['The Age', ...], setter: [...] }; '' stands for puzzles with no value. Empty list = all.
+  const VALUE_KEYS = { source: 'source', setter: 'setter' };
+  let valueFilter = {};
+  try { valueFilter = JSON.parse(store.get('squares.valueFilter', '{}')) || {}; } catch { valueFilter = {}; }
+  const activeValues = k => (valueFilter[k] || []);
+  const saveValueFilter = () => store.set('squares.valueFilter', JSON.stringify(valueFilter));
+  const noneLabel = k => (k === 'source' ? 'No source' : 'No setter');
+  function openValueFilter(k) {
+    const counts = new Map();
+    for (const p of all) { const v = metaOf(p)[k] || ''; counts.set(v, (counts.get(v) || 0) + 1); }
+    const values = [...counts.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, undefined, { sensitivity: 'base' })));
+    const listBox = h('div', { class: 'vf-list' });
+    const draw = () => listBox.replaceChildren(...values.map(v => {
+      const on = activeValues(k).includes(v);
+      return h('label', { class: 'vf-item' + (on ? ' on' : '') },
+        h('input', {
+          type: 'checkbox', checked: on,
+          onchange: e => {
+            const set = new Set(activeValues(k));
+            if (e.target.checked) set.add(v); else set.delete(v);
+            valueFilter[k] = [...set];
+            saveValueFilter(); draw(); render();
+          },
+        }),
+        h('span', { class: 'vf-name' }, v || h('i', {}, noneLabel(k))),
+        h('span', { class: 'vf-count' }, String(counts.get(v))));
+    }));
+    draw();
+    const s = sheet(`Show ${SORTS[k].toLowerCase()}s`, h('div', { class: 'vf pad' },
+      h('p', { class: 'hint' }, `Tick the ${k === 'source' ? 'sources' : 'setters'} to show. Nothing ticked shows them all.`),
+      listBox,
+      h('div', { class: 'toolbar flat' },
+        h('button', { onclick: () => { valueFilter[k] = []; saveValueFilter(); draw(); render(); } }, 'Show all'),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'primary', onclick: () => s.close() }, 'Done'))));
+  }
+  // Long press (about half a second) on a chip; a normal tap still sorts.
+  function longPress(el, onLong) {
+    let timer = null, fired = false;
+    const cancel = () => { clearTimeout(timer); timer = null; };
+    el.addEventListener('pointerdown', () => { fired = false; cancel(); timer = setTimeout(() => { fired = true; timer = null; onLong(); }, 500); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => el.addEventListener(t, cancel));
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    el.addEventListener('click', e => { if (fired) { e.stopImmediatePropagation(); e.preventDefault(); fired = false; } }, true);
+  }
+
   function render() {
     filterEl.className = 'chip filter' + (filter !== 'all' ? ' on' : '');
     filterEl.textContent = FILTERS[filter];
     filterEl.setAttribute('aria-label', `Showing ${FILTERS[filter].toLowerCase()} puzzles. Tap to change.`);
-    chips.replaceChildren(...Object.entries(SORTS).map(([k, label]) =>
-      h('button', {
-        class: 'chip' + (k === key ? ' on' : ''), 'aria-pressed': k === key ? 'true' : 'false',
+    chips.replaceChildren(...Object.entries(SORTS).map(([k, label]) => {
+      const filtered = VALUE_KEYS[k] && activeValues(k).length > 0;
+      const b = h('button', {
+        class: 'chip' + (k === key ? ' on' : '') + (filtered ? ' filtered' : ''), 'aria-pressed': k === key ? 'true' : 'false',
+        'aria-label': VALUE_KEYS[k] ? `Sort by ${label.toLowerCase()}. Press and hold to filter by ${label.toLowerCase()}${filtered ? ' (filtered)' : ''}.` : null,
         onclick: () => {
           if (k === key) dir = dir === 'desc' ? 'asc' : 'desc';
           else { key = k; dir = 'desc'; }
           store.set('squares.sort', key); store.set('squares.sortDir', dir);
           render();
         },
-      }, label, k === key ? (dir === 'desc' ? ' ↓' : ' ↑') : '')), h('span', { class: 'sort-sep' }), filterEl);
-    const shown = all.filter(p => filter === 'all' || (filter === 'complete' ? isDone(p) : !isDone(p)));
+      }, label, k === key ? (dir === 'desc' ? ' ↓' : ' ↑') : '');
+      if (VALUE_KEYS[k]) longPress(b, () => openValueFilter(k));
+      return b;
+    }), h('span', { class: 'sort-sep' }), filterEl);
+    const byValue = p => Object.keys(VALUE_KEYS).every(k => !activeValues(k).length || activeValues(k).includes(metaOf(p)[k] || ''));
+    const shown = all.filter(p => (filter === 'all' || (filter === 'complete' ? isDone(p) : !isDone(p))) && byValue(p));
     if (!shown.length) {
-      listEl.replaceChildren(h('p', { class: 'hint filter-empty' }, filter === 'complete' ? 'No complete puzzles yet.' : 'No incomplete puzzles — all done!'));
+      const anyValue = Object.keys(VALUE_KEYS).some(k => activeValues(k).length);
+      listEl.replaceChildren(h('div', { class: 'filter-empty' },
+        h('p', { class: 'hint' }, anyValue ? 'No puzzles match these filters.'
+          : filter === 'complete' ? 'No complete puzzles yet.' : 'No incomplete puzzles — all done!'),
+        anyValue ? h('button', { class: 'small', onclick: () => { valueFilter = {}; saveValueFilter(); render(); } }, 'Clear source/setter filters') : null));
       return;
     }
     listEl.replaceChildren(...sortPuzzles(shown, key, dir).map(p => {

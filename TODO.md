@@ -90,6 +90,8 @@ Ideas and fixes for the crossword app (`crossword/`). Newest at the bottom.
   to flip).
 - [x] **References vs linked answers** – "13 21-down stuck in… (5)" is a reference, not a two-part answer: a leading
   entry number only links when the clue's (lengths) cover both entries. Existing puzzles are fixed when opened.
+- [x] **Filter by source / setter** – press and hold the Source or Setter chip to tick which values to show (with
+  counts, including "No source/setter"); a ring and dot mark a filtered chip; remembered; tap still sorts.
 
 ## Notes on how these work
 
