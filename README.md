@@ -13,7 +13,7 @@ normal app and works offline (except clue scanning the first time, which downloa
 
 0. **Your puzzles** – each shows its source, setter, number and publishing date (sort by date, last edited,
    source or setter; newest first by default; filter to complete or incomplete,
-   and press and hold Source or Setter to show only some of them), the first clue, how much is filled in and the time spent. Tap + to add one.
+   and press and hold Source or Setter to show just one of them), the first clue, how much is filled in and the time spent. Tap + to add one.
 1. **PDF** – + → *Add from Files* and pick a crossword PDF (e.g. a newspaper's print version) or an image. PDFs are
    read exactly: the grid from the drawing, the clues as text.
 1. **Photo** – take a picture or pick a screenshot of a crossword page. That's it: the app finds the grid,

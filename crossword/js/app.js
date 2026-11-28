@@ -599,42 +599,37 @@ async function homeView() {
     onclick: () => { filter = order[(order.indexOf(filter) + 1) % order.length]; store.set('squares.filter', filter); render(); },
   });
 
-  // Value filters: hold the Source or Setter chip to choose which values to show. Stored as
-  // { source: ['The Age', ...], setter: [...] }; '' stands for puzzles with no value. Empty list = all.
+  // Value filters: hold the Source or Setter chip to show only one value. Stored as { source: 'The Age',
+  // setter: 'DA' }; '' stands for puzzles with no value; a missing key means no filter.
   const VALUE_KEYS = { source: 'source', setter: 'setter' };
   let valueFilter = {};
   try { valueFilter = JSON.parse(store.get('squares.valueFilter', '{}')) || {}; } catch { valueFilter = {}; }
-  const activeValues = k => (valueFilter[k] || []);
+  for (const k of Object.keys(valueFilter)) {               // older versions stored a list of values
+    if (Array.isArray(valueFilter[k])) { if (valueFilter[k].length) valueFilter[k] = valueFilter[k][0]; else delete valueFilter[k]; }
+  }
+  const hasValue = k => typeof valueFilter[k] === 'string';
   const saveValueFilter = () => store.set('squares.valueFilter', JSON.stringify(valueFilter));
   const noneLabel = k => (k === 'source' ? 'No source' : 'No setter');
+  const valueLabel = k => (valueFilter[k] === '' ? noneLabel(k) : valueFilter[k]);
   function openValueFilter(k) {
     const counts = new Map();
     for (const p of all) { const v = metaOf(p)[k] || ''; counts.set(v, (counts.get(v) || 0) + 1); }
     const values = [...counts.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, undefined, { sensitivity: 'base' })));
-    const listBox = h('div', { class: 'vf-list' });
-    const draw = () => listBox.replaceChildren(...values.map(v => {
-      const on = activeValues(k).includes(v);
-      return h('label', { class: 'vf-item' + (on ? ' on' : '') },
-        h('input', {
-          type: 'checkbox', checked: on,
-          onchange: e => {
-            const set = new Set(activeValues(k));
-            if (e.target.checked) set.add(v); else set.delete(v);
-            valueFilter[k] = [...set];
-            saveValueFilter(); draw(); render();
-          },
-        }),
-        h('span', { class: 'vf-name' }, v || h('i', {}, noneLabel(k))),
-        h('span', { class: 'vf-count' }, String(counts.get(v))));
-    }));
-    draw();
-    const s = sheet(`Show ${SORTS[k].toLowerCase()}s`, h('div', { class: 'vf pad' },
-      h('p', { class: 'hint' }, `Tick the ${k === 'source' ? 'sources' : 'setters'} to show. Nothing ticked shows them all.`),
-      listBox,
-      h('div', { class: 'toolbar flat' },
-        h('button', { onclick: () => { valueFilter[k] = []; saveValueFilter(); draw(); render(); } }, 'Show all'),
-        h('span', { class: 'grow' }),
-        h('button', { class: 'primary', onclick: () => s.close() }, 'Done'))));
+    const choose = v => {
+      if (v === null) delete valueFilter[k]; else valueFilter[k] = v;
+      saveValueFilter(); render(); s.close();
+    };
+    const item = (v, label, count) => {
+      const on = v === null ? !hasValue(k) : valueFilter[k] === v;
+      return h('button', { class: 'vf-item' + (on ? ' on' : ''), role: 'radio', 'aria-checked': on ? 'true' : 'false', onclick: () => choose(v) },
+        h('span', { class: 'vf-radio' }),
+        h('span', { class: 'vf-name' }, label),
+        h('span', { class: 'vf-count' }, String(count)));
+    };
+    const s = sheet(`Show ${SORTS[k].toLowerCase()}`, h('div', { class: 'vf pad' },
+      h('div', { class: 'vf-list', role: 'radiogroup' },
+        item(null, `All ${k === 'source' ? 'sources' : 'setters'}`, all.length),
+        ...values.map(v => item(v, v || h('i', {}, noneLabel(k)), counts.get(v))))));
   }
   // Long press (about half a second) on a chip; a normal tap still sorts.
   function longPress(el, onLong) {
@@ -651,24 +646,24 @@ async function homeView() {
     filterEl.textContent = FILTERS[filter];
     filterEl.setAttribute('aria-label', `Showing ${FILTERS[filter].toLowerCase()} puzzles. Tap to change.`);
     chips.replaceChildren(...Object.entries(SORTS).map(([k, label]) => {
-      const filtered = VALUE_KEYS[k] && activeValues(k).length > 0;
+      const filtered = VALUE_KEYS[k] && hasValue(k);
       const b = h('button', {
         class: 'chip' + (k === key ? ' on' : '') + (filtered ? ' filtered' : ''), 'aria-pressed': k === key ? 'true' : 'false',
-        'aria-label': VALUE_KEYS[k] ? `Sort by ${label.toLowerCase()}. Press and hold to filter by ${label.toLowerCase()}${filtered ? ' (filtered)' : ''}.` : null,
+        'aria-label': VALUE_KEYS[k] ? `Sort by ${label.toLowerCase()}${filtered ? `, showing only ${valueLabel(k)}` : ''}. Press and hold to filter by ${label.toLowerCase()}.` : null,
         onclick: () => {
           if (k === key) dir = dir === 'desc' ? 'asc' : 'desc';
           else { key = k; dir = 'desc'; }
           store.set('squares.sort', key); store.set('squares.sortDir', dir);
           render();
         },
-      }, label, k === key ? (dir === 'desc' ? ' ↓' : ' ↑') : '');
+      }, h('span', { class: 'chip-text' }, filtered ? valueLabel(k) : label), k === key ? (dir === 'desc' ? ' ↓' : ' ↑') : '');
       if (VALUE_KEYS[k]) longPress(b, () => openValueFilter(k));
       return b;
     }), h('span', { class: 'sort-sep' }), filterEl);
-    const byValue = p => Object.keys(VALUE_KEYS).every(k => !activeValues(k).length || activeValues(k).includes(metaOf(p)[k] || ''));
+    const byValue = p => Object.keys(VALUE_KEYS).every(k => !hasValue(k) || (metaOf(p)[k] || '') === valueFilter[k]);
     const shown = all.filter(p => (filter === 'all' || (filter === 'complete' ? isDone(p) : !isDone(p))) && byValue(p));
     if (!shown.length) {
-      const anyValue = Object.keys(VALUE_KEYS).some(k => activeValues(k).length);
+      const anyValue = Object.keys(VALUE_KEYS).some(hasValue);
       listEl.replaceChildren(h('div', { class: 'filter-empty' },
         h('p', { class: 'hint' }, anyValue ? 'No puzzles match these filters.'
           : filter === 'complete' ? 'No complete puzzles yet.' : 'No incomplete puzzles — all done!'),
